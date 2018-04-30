@@ -1,0 +1,24 @@
+{
+  "name": "gulp-drupal-bootstrap",
+  "version": "1.0.0",
+  "description": "Gulp automation for Drupal-Bootstrap development",
+  "main": "gulpfile.js",
+  "scripts": {
+    "test": "echo \"Error: No test specified\" && exit 1"
+  },
+  "author": "Aalap Shah",
+  "license": "MIT",
+  "devDependencies": {
+    "del": "latest",
+    "fancy-log": "latest",
+    "gulp": "latest",
+    "gulp-autoprefixer": "latest",
+    "gulp-if": "latest",
+    "gulp-livereload": "latest",
+    "gulp-sass": "latest",
+    "gulp-sourcemaps": "latest",
+    "path": "latest",
+    "run-sequence": "latest",
+    "yargs": "latest"
+  }
+}
