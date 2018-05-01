@@ -17,9 +17,7 @@
  *     }
  * -----------------------------------------------------------------------------
  */
-/* Variable name legend:
- *   pkg: Package                       thm: Theme
- */
+
 const version = '1.0.0'                               // script version
 const pkgColors = require('colors');                  // colors to console
 const pkgDel = require('del');                        // to delete directories and files
@@ -34,40 +32,86 @@ const pkgPath = require('path');                      // utilities to work with 
 const pkgRunSequence = require('run-sequence');
 const pkgSass = require('gulp-sass');                 // sass-preprocessor
 const pkgSourcemaps = require('gulp-sourcemaps');     // inline source map in source files, helpful in debugging
-const argv = require('yargs').argv;                   // parse command line arguments
+const pkgYargs = require('yargs');                     // parse command line arguments
+
+const argv = new pkgYargs
+    .option('b', {alias: 'beep', default: false, type: 'boolean'})
+    .option('d', {alias: 'dev', default: false, type: 'boolean'})
+    .option('D', {alias: 'debug', default: false, type: 'boolean'})
+    .option('m', {alias: 'sourcemap', default: false, type: 'boolean'})
+    .option('s', {alias: 'style', default: '', type: 'string'})
+    .option('r', {alias: 'drupalroot', default: pkgPath.join(process.cwd(), '..'), type: 'string'})
+    .option('t', {alias: 'theme', default: 'mytheme', type: 'string'})
+    .argv;
 //const pkgConcat = require('gulp-concat');           // to concatenate files into one
 //const pkgUglify = require('gulp-uglify');           // minify js, optional, comment out if not used
 //const imagemin = require('gulp-imagemin');
 //const pngquant = require('imagemin-pngquant');
 
+
 /* -----------------------------------------------------------------------------
- * Writes a log message to console with time prefix.
+ * Writes a log message to console with time or user defined prefix.
  * -----------------------------------------------------------------------------
  */
-function Log() {}
-Log.prototype.raw = function(text) {
-  console.log('['.white + getTime().grey + '] '.white + text);
-};
-Log.prototype.dbg = function(text) {
-  this.raw(text.stripColors.grey);
-};
-Log.prototype.inf = function(text) {
-  this.raw(text.stripColors.white);
-};
-Log.prototype.wrn = function(text) {
-  this.raw(text.stripColors.yellow);
-};
-Log.prototype.err = function(text) {
-  this.raw(text.stripColors.red);
-};
-Log.prototype.don = function(text) {
-  this.raw((text.toUpperCase() + ' Done').yellow + beep);
-};
-Log.prototype.sep = function(text='', char='=', length=69) {
-  this.raw(char.repeat(2).white
-      + text.toUpperCase().red
-      + char.repeat(length - 2 - text.length).white);
-};
+class Log {
+  constructor(prefix='', beep=false, debug=false, showMessageLabel=true) {
+    this.prefix = prefix.toString();
+    if (this.prefix !== '') {
+      this.prefix = fixLength(this.prefix.toUpperCase(), 8, ' ', true);
+    }
+    this.beep = (beep ? '\x07' : '');
+    this.debug = debug;
+    this.showMessageLabel = showMessageLabel;
+  }
+  raw(text) {
+      console.log('['.white
+          + (this.prefix === '' ? getTime() : this.prefix).grey
+          + '] '.white
+          + text);
+      return this;
+  }
+  dbg(text) {
+    if (this.debug) {
+      this.raw(('DBG: ' + text).stripColors.grey);
+    }
+    return this;
+  }
+  inf(text) {
+    this.raw((((this.showMessageLabel || this.debug) ? 'INF: ' : '')
+        + text).stripColors.cyan);
+    return this;
+  }
+  wrn(text) {
+    this.raw((((this.showMessageLabel || this.debug) ? 'WRN: ' : '')
+        + text).stripColors.yellow
+        + this.beep);
+    return this;
+  }
+  err(text) {
+    this.raw((((this.showMessageLabel || this.debug) ? 'ERR: ' : '')
+        + text).stripColors.red
+        + this.beep);
+    return this;
+  }
+  log(text) {
+    this.raw(text.stripColors);
+    return this;
+  }
+  don(text) {
+    this.raw((text.toUpperCase() + ' Done').yellow + this.beep);
+    return this;
+  }
+  sep(text='', char='=', length=69) {
+    this.raw(char.repeat(2).white
+        + text.toUpperCase().green
+        + char.repeat(length - 2 - text.length).white);
+    return this;
+  }
+  ter(text) {
+    this.err(text);
+    process.exit(-1);
+  }
+}
 
 /* -----------------------------------------------------------------------------
  * Gets current time.
@@ -75,9 +119,9 @@ Log.prototype.sep = function(text='', char='=', length=69) {
  */
 function getTime() {
   now = new Date();
-  return pad(now.getHours(), 2, '0') + ':'
-      + pad(now.getMinutes(), 2, '0') + ':'
-      + pad(now.getSeconds(), 2, '0');
+  return fixLength(now.getHours(), 2, '0') + ':'
+      + fixLength(now.getMinutes(), 2, '0') + ':'
+      + fixLength(now.getSeconds(), 2, '0');
 };
 
 /* -----------------------------------------------------------------------------
@@ -85,13 +129,13 @@ function getTime() {
  * Type can be of type 'D' or 'F' (case-insensitive).
  * -----------------------------------------------------------------------------
  */
-function isValidPath(path, type) {
+function isValidPath(path, type='d') {
   var isValidPath = false;
-  type = type.toUpperCase();
+  type = type.toLowerCase();
   //if (pkgFs.existsSync(path)) {
   try {                   // if the path doesn't exist, statSync throws an error
     var stats = pkgFs.statSync(path);
-    if ((type == 'D' && stats.isDirectory()) || (type == 'F' && stats.isFile())) {
+    if ((type == 'd' && stats.isDirectory()) || (type == 'f' && stats.isFile())) {
       isValidPath = true;
     }
   } catch(err) {}
@@ -100,10 +144,11 @@ function isValidPath(path, type) {
 }
 
 /* -----------------------------------------------------------------------------
- * Pads character to left or right to make string of specified length.
+ * Fixes length of input text string to specific value. If input text is
+ * smaller, adds directional padding, else substrings
  * -----------------------------------------------------------------------------
  */
-function pad(text, targetLength, padChar=' ', padRight=false) {
+function fixLength(text, targetLength, padChar=' ', padRight=false) {
   text = text.toString();
   padChar = padChar.toString();
   padLength = targetLength - text.length;
@@ -111,28 +156,10 @@ function pad(text, targetLength, padChar=' ', padRight=false) {
     padChars = padChar.repeat(Math.ceil(padLength/padChar.length));
     padChars = padChars.substr(padRight ? 0 : (padChars.length - padLength), padLength);
     text = (padRight ? '' : padChars) + text + (padRight ? padChars : '');
+  } else if (padLength < 0) {
+    text = text.substr(0, targetLength);
   }
   return text;
-}
-
-/* -----------------------------------------------------------------------------
- * There are command line args that control the way the script behaves. It is
- * nice to show to the developer the main parameters that the script is going to
- * use.
- * -----------------------------------------------------------------------------
- */
-function showInvocationArgs() {
-  if (showInvocationArgs.done === undefined) {    // message displayed only the
-    showInvocationArgs.done = true;               // first time it is called
-    log.sep(' invocation > ');
-    log.inf('Build For        : ' + (devBuild ? 'Development' : 'Production'));
-    log.inf('Theme Root Dir   : ' + thmRootDir);
-    log.inf('Theme SCSS Dir   : ' + thmScssDir);
-    log.inf('Theme CSS Dir    : ' + thmCssDir);
-    log.inf('Source Maps      : ' + (genCssSourcemap ? 'Generate' : 'Remove'));
-    log.inf('CSS Output Style : ' + cssOutputStyle);
-    log.sep(' < invocation ');
-  }
 }
 
 /* -----------------------------------------------------------------------------
@@ -140,10 +167,10 @@ function showInvocationArgs() {
  * -----------------------------------------------------------------------------
  */
 function showWelcomeMessage() {
-  log.inf('gulp-drupal-bootstrap, v' + version);
-  log.inf('Gulp automation for Drupal-Bootstrap development');
-  log.inf('Developed by Fishfin (https://github.com/fishfin), 2018');
-  log.inf('Use \'gulp usage\' for help, Ctrl+C to terminate');
+  log.log('gulp-drupal-bootstrap, v' + version)
+      .log('Gulp automation for Drupal-Bootstrap development')
+      .log('Developed by Fishfin (https://github.com/fishfin), 2018')
+      .log('Use \'gulp usage\' for help, Ctrl+C to terminate');
 }
 
 /* -----------------------------------------------------------------------------
@@ -155,90 +182,152 @@ function validatePaths(pathArray) {
   for (var idx in pathArray) {
     path = pathArray[idx];
     if (!isValidPath(path[0], path[1])) {
-      log.inf(`Error: ${path[0]} is not a valid ${path[1] === 'D' ? 'directory' : 'file'}`);
+      log.err(`${path[0]} is not a valid ${path[1] === 'D' ? 'directory' : 'file'}`);
       process.exit(-1);
     }
   }
 }
 
-const log = new Log();
+const log = new Log('', argv.beep, argv.debug);
+
+/* -----------------------------------------------------------------------------
+ * Sass class that takes care of all sass processing
+ * -----------------------------------------------------------------------------
+ */
+class Sass {
+  constructor(dev=false, drupalroot='', theme='mytheme', style='compressed'
+              , sourcemap=false, debug=false) {
+    if (!isValidPath(drupalroot, 'd')) {
+      log.ter('Drupal root directory ' + drupalroot + ' is not valid');
+    }
+    this.drupalroot = drupalroot;
+
+    var themedir_try1 = pkgPath.join(this.drupalroot, 'themes', theme);
+    var themedir_try2 = pkgPath.join(this.drupalroot, 'themes', 'custom', theme);
+    this.themedir = ''
+    if (isValidPath(themedir_try1, 'd')) {
+      this.themedir = themedir_try1;
+    } else if (isValidPath((themedir_try2), 'd')) {
+      this.themedir = themedir_try2;
+    }
+    if (this.themedir === '') {
+      log.err('Could not find valid Drupal theme directory at any of the following locations:')
+          .err('  - ' + themedir_try1)
+          .err('  - ' + themedir_try2)
+          .ter('Please give a valid theme name and try again.');
+    }
+
+    this.themedir_scss = pkgPath.join(this.themedir, 'scss');
+    if (!isValidPath(this.themedir_scss, 'd')) {
+      log.err('Could not find SCSS directory at ')
+          .err(this.themedir_scss)
+          .ter('Make sure structure of Bootstrap subtheme is correct.');
+    }
+
+    this.themedir_css = pkgPath.join(this.themedir, 'css');
+    if (!isValidPath(this.themedir_css, 'd')) {
+      log.err('Could not find CSS directory at ')
+          .err(this.themedir_css)
+          .ter('Make sure structure of Bootstrap subtheme is correct.');
+    }
+
+    this.themefile_scss = pkgPath.join(this.themedir_scss, 'style.scss');
+    if (!isValidPath(this.themefile_scss, 'f')) {
+      log.err('Could not find SCSS file at ')
+          .err(this.themefile_scss)
+          .ter('Make sure structure of Bootstrap subtheme is correct.');
+    }
+
+    this.style = (style === '')
+        ? (dev ? 'expanded' : 'compressed') : style.toLowerCase();
+    if (!['compact', 'compressed', 'expanded', 'nested'].includes(this.style)) {
+      log.ter('SASS Style ' + style + ' is invalid');
+    }
+    this.sourcemap = (sourcemap || dev);
+    this.debug = debug;
+    log.sep(' sass-config > ')
+        .log('Build For        : ' + (this.dev ? 'Development' : 'Production'))
+        .log('Drupal Root Dir  : ' + this.drupalroot)
+        .log('Theme Dir        : ' + this.themedir)
+        .log('Theme SCSS Dir   : ' + this.themedir_scss)
+        .log('Theme CSS Dir    : ' + this.themedir_css)
+        .log('Source Maps      : ' + (this.sourcemap ? 'Generate' : 'Remove'))
+        .log('CSS Output Style : ' + this.style)
+        .sep(' < sass-config ');
+  }
+  watch() {
+    var scssFilePattern = pkgPath.normalize(this.themedir_scss + '/**/*.scss')
+    log.sep(' sass-watch > ')
+        .log('Watching ' + scssFilePattern);
+    pkgGulp.watch(scssFilePattern, ['sass']);
+    log.sep(' < sass-watch ');
+  }
+  /* ---------------------------------------------------------------------------
+   * This task creates CSS from one single core SCSS file. It first runs the
+   * sass-clean task to remove the Sourcemaps, then based on flags, creates new
+   * Sourcemap (or not), then runs the sass preprocessor. This task does not
+   * watch any files, that job is done by other task sass-watch.
+   * ---------------------------------------------------------------------------
+   */
+  preprocess() {
+    log.sep(' sass-preprocess > ')
+        .log('Input : ' + this.themefile_scss)
+        .log('Output: ' + pkgPath.join(this.themedir_css
+            , pkgPath.basename(this.themefile_scss, pkgPath.extname(this.themefile_scss)) + '.css'))
+        .sep(' < sass-preprocess ');
+    pkgGulp.src(this.themefile_scss)                              // concerned only with one single file - style.scss
+        .pipe(pkgIf(this.sourcemap, pkgSourcemaps.init()))        // create sourcemaps only parameter set
+        .pipe(pkgSass({outputStyle: this.style}).on('error', pkgSass.logError))
+        .pipe(pkgAutoprefixer('last 2 version', 'safari 5', 'ie 7', 'ie 8', 'ie 9', 'opera 12.1', 'ios 6', 'android 4'))
+        .pipe(pkgIf(this.sourcemap, pkgSourcemaps.write('./')))   // write sourcemap only if dev build
+        .pipe(pkgGulp.dest(this.themedir_css))
+        .on('end', function() {log.don('sass-preprocess');});
+  }
+  clean() {
+    var sourceMapFilePattern = pkgPath.normalize(this.themedir_css + '/*.map');
+    log.log('Removing maps ' + sourceMapFilePattern);
+    pkgDel.sync([sourceMapFilePattern], {force: true});
+    log.don('sass-clean');
+  }
+}
+
+function sass() {
+  if (sass.singleton === undefined) {
+    sass.singleton = new Sass(argv.dev, argv.drupalroot, argv.theme, argv.style
+        , argv.sourcemap, argv.debug);
+  }
+  return sass.singleton;
+}
 
 showWelcomeMessage();
-
-const beep = (argv.beep === undefined) ? '' : '\x07';
-const devBuild = (argv.dev !== undefined);
-const cssOutputStyle = ['compact', 'compressed', 'expanded', 'nested'].includes(
-    argv.cos === undefined ? '' : argv.cos.toLowerCase())
-    ? argv.cos.toLowerCase() : (devBuild ? 'expanded' : 'compressed');
-const genCssSourcemap = (argv.smap !== undefined || argv.dev);
-const thmRootDir = (argv.btr === undefined)
-    ? pkgPath.join(process.cwd(), '..') : argv.btr;
-const thmScssDir = (argv.thmscss === undefined)
-    ? pkgPath.join(thmRootDir, 'scss') : argv.thmscss;
-const thmScssFile = pkgPath.join(thmRootDir, 'scss', 'style.scss');
-const thmCssDir = (argv.thmcss === undefined)
-    ? pkgPath.join(thmRootDir, 'css') : argv.thmcss;
-const thmCssFile = pkgPath.join(thmCssDir, pkgPath.basename(thmScssFile, pkgPath.extname(thmScssFile)) + '.css');
-
-validatePaths([[thmScssDir, 'D'], [thmScssFile, 'F'], [thmCssDir, 'D']]);
 
 pkgGulp.task('default', function() {
   pkgRunSequence('watch');
 });
 
 pkgGulp.task('watch', function() {
-  showInvocationArgs();
-  pkgRunSequence(['watch:sass']);
-})
-
-pkgGulp.task('watch:sass', ['sass'], function() {
-  showInvocationArgs();
-  scssFilePattern = pkgPath.normalize(thmScssDir + '/**/*.scss')
-  log.sep(' watch:sass > ');
-  log.inf('Watching ' + scssFilePattern);
-  pkgGulp.watch(scssFilePattern, ['sass']);
-  log.sep(' < watch:sass ');
-})
-
-pkgGulp.task('watchx', function() {
-  showInvocationArgs();
-  pkgLivereload.listen();
-  pkgGulp.watch('./wp-content/themes/olympos/lib/*.js', ['uglify']);
-  pkgGulp.watch(['./wp-content/themes/olympos/style.css'
-    , './wp-content/themes/olympos/*.php'
-    , './wp-content/themes/olympos/js/*.js'
-    , './wp-content/themes/olympos/parts/**/*.php'], function (files){
-    pkgLivereload.changed(files)
-  });
+  pkgRunSequence(['sass-watch', 'livereload']);
 });
 
-pkgGulp.task('clean:sass', function() {
-  sourceMapFilePattern = pkgPath.normalize(thmCssDir + '/*.map');
-  log.inf('Removing maps ' + sourceMapFilePattern);
-  pkgDel.sync([sourceMapFilePattern], {force: true});
-  log.don('clean:sass');
-})
+pkgGulp.task('sass-clean', function() {
+  sass().clean();
+});
 
-/* -----------------------------------------------------------------------------
- * This task creates CSS from one single core SCSS file. It first runs the
- * clean:sass task to remove the Sourcemaps, then based on flags, creates new
- * Sourcemap (or not), then runs the sass preprocessor. This task does not watch
- * any files, that job is done by other task watch:sass.
- * -----------------------------------------------------------------------------
- */
-pkgGulp.task('sass', ['clean:sass'], function() {
-  showInvocationArgs();
-  log.sep(' sass > ');
-  log.inf('Input : ' + thmScssFile);
-  log.inf('Output: ' + thmCssFile);
-  pkgGulp.src(thmScssFile)                            // concerned only with one single file - style.scss
-      .pipe(pkgIf(genCssSourcemap, pkgSourcemaps.init()))        // create sourcemaps only parameter set
-      .pipe(pkgSass({outputStyle: cssOutputStyle}).on('error', pkgSass.logError))
-      .pipe(pkgAutoprefixer('last 2 version', 'safari 5', 'ie 7', 'ie 8', 'ie 9', 'opera 12.1', 'ios 6', 'android 4'))
-      .pipe(pkgIf(genCssSourcemap, pkgSourcemaps.write('./')))   // write sourcemap only if dev build
-      .pipe(pkgGulp.dest(thmCssDir))
-      .on('end', function() {log.don('sass');});
-  log.sep(' < sass ');
+pkgGulp.task('sass', ['sass-clean'], function() {
+  sass().preprocess();
+});
+
+pkgGulp.task('sass-watch', ['sass'], function() {
+  sass().watch();
+});
+
+pkgGulp.task('livereload', function() {
+  sass();
+  pkgLivereload.listen();
+  //pkgGulp.watch('./wp-content/themes/olympos/lib/*.js', ['uglify']);
+  pkgGulp.watch([pkgPath.normalize(sass.singleton.themedir_css + '/*.css')
+      , pkgPath.normalize(sass.singleton.themedir + '/templates/**/*.twig')]
+      , function(files) {pkgLivereload.changed(files) });
 });
 
 /* -----------------------------------------------------------------------------
@@ -247,23 +336,28 @@ pkgGulp.task('sass', ['clean:sass'], function() {
  * -----------------------------------------------------------------------------
  */
 pkgGulp.task('usage', function() {
-  log.sep(' usage > ');
-  log.inf('gulp [task-name] [--opt1 [opt1val]] [--opt2 [opt2val]] ...');
-  log.sep('', '-');
-  log.inf('task-name: [default]|clean:sass|sass|watch:sass');
-  log.inf('--beep   : (no value to be provided with this option)');
-  log.inf('           when set, beeps once on completion of an important task');
-  log.inf('           on completion');
-  log.inf('--dev    : (no value to be provided with this option)');
-  log.inf('           when set, uses dev defaults for other options,else prod');
-  log.inf('           defaults unless overridden');
-  log.inf('--cos    : compact|compressed|expanded|nested');
-  log.inf('           CSS Output Style (cos) of CSS, if not provided, defaults');
-  log.inf('           to \'expanded\' for --dev and \'compressed\' otherwise');
-  log.inf('--smap   : (no value to be provided with this option)');
-  log.inf('           when set, uses generates CSS Source Maps, otherwise');
-  log.inf('           generates by default for --dev otherwise removes');
-  log.sep(' < usage ');
+  log.sep(' usage > ')
+      .log('gulp [task-name] [--opt1 [opt1val]] [--opt2 [opt2val]] ...')
+      .sep('', '-')
+      .log('task-name')
+      .log('    [default]|sass-clean|sass|sass-watch')
+      .log('--beep or -b')
+      .log('    no value to be provided with this option; when set, beeps once on')
+      .log('    completion of an important task')
+      .log('--dev or -d')
+      .log('    no value to be provided with this option; when set, uses dev')
+      .log('    defaults for other options,else prod defaults - unless overridden')
+      .log('--debug or -D')
+      .log('    no value to be provided with this option; logs debug messages')
+      .log('--style or -s')
+      .log('    compact|compressed|expanded|nested')
+      .log('    CSS Output Style (cos) of CSS, if not provided, defaults to')
+      .log('    \'expanded\' for --dev and \'compressed\' otherwise')
+      .log('--source-map or -m')
+      .log('    no value to be provided with this option; when set, generates CSS)')
+      .log('    source maps, otherwise generates by default for --dev, otherwise')
+      .log('    removes')
+      .sep(' < usage ');
 });
 
 /* -----------------------------------------------------------------------------
