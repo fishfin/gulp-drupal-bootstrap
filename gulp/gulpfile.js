@@ -176,13 +176,13 @@ class Sass {
     this.sourcemap = (sourcemap || dev);
     this.debug = debug;
     log.sep(' sass-config > ')
-        .log('Build For        : ' + (this.dev ? 'Development' : 'Production'))
-        .log('Drupal Root Dir  : ' + this.drupalroot)
-        .log('Theme Dir        : ' + this.themedir)
-        .log('Theme SCSS Dir   : ' + this.themedir_scss)
-        .log('Theme CSS Dir    : ' + this.themedir_css)
-        .log('Source Maps      : ' + (this.sourcemap ? 'Generate' : 'Remove'))
-        .log('CSS Output Style : ' + this.style)
+        .log('Build For      : ' + (this.dev ? 'Development' : 'Production'))
+        .log('Drupal Root Dir: ' + this.drupalroot)
+        .log('Theme Dir      : ' + this.themedir)
+        .log('Theme SCSS Dir : ' + this.themedir_scss)
+        .log('Theme CSS Dir  : ' + this.themedir_css)
+        .log('Source Maps    : ' + (this.sourcemap ? 'Generate' : 'Remove'))
+        .log('CSS Style      : ' + this.style)
         .sep(' < sass-config ');
   }
   watch() {
