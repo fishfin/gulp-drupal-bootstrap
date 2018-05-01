@@ -1,6 +1,6 @@
 /*!
  * Gulp automation for Drupal-Bootstrap development
- * Developed by Aalap Shah (http://aalapshah.in)
+ * Developed by Fishfin (https://github.com/fishfin)
  * Year 2018
  * Licensed under the MIT license
  */
