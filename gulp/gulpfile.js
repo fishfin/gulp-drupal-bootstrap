@@ -18,29 +18,27 @@
  * -----------------------------------------------------------------------------
  */
 
-const version = '1.0.0'                               // script version
-const pkgColors = require('colors');                  // colors to console
-const pkgDel = require('del');                        // to delete directories and files
-//const pkgUtil = require('fancy-log');               // log to terminal
-const pkgFs  = require('fs');                         // interact with file system, like check if file exists etc. does not require entry in package.json
-const pkgGulp = require('gulp');                      // automation engine
-const pkgUtil = require('gulp-util');                 // deprecated but still used by gulp, so reusing, otherwise try fancy-log (but no colors)
-const pkgAutoprefixer = require('gulp-autoprefixer'); // auto vendor prefixes i.e. transform to -webkit-transform, -ms-transform, etc.
-const pkgIf = require('gulp-if');
-const pkgLivereload = require('gulp-livereload');     // aumatically reloads browser when any of source files changes
-const pkgPath = require('path');                      // utilities to work with files and directories
-const pkgRunSequence = require('run-sequence');
-const pkgSass = require('gulp-sass');                 // sass-preprocessor
-const pkgSourcemaps = require('gulp-sourcemaps');     // inline source map in source files, helpful in debugging
-const pkgYargs = require('yargs');                     // parse command line arguments
+const version = '1.0.0'                                 // script version
+const pkgColors       = require('colors');              // colors to console
+const pkgDel          = require('del');                 // to delete directories and files
+const pkgFs           = require('fs');                  // interact with file system, like check if file exists etc. does not require entry in package.json
+const pkgGulp         = require('gulp');                // automation engine
+const pkgAutoprefixer = require('gulp-autoprefixer');   // auto vendor prefixes i.e. transform to -webkit-transform, -ms-transform, etc.
+const pkgIf           = require('gulp-if');             // useful condition checking in gulp
+const pkgLivereload   = require('gulp-livereload');     // aumatically reloads browser when any of source files changes
+const pkgSass         = require('gulp-sass');           // sass-preprocessor
+const pkgSourcemaps   = require('gulp-sourcemaps');     // inline source map in source files, helpful in debugging
+const pkgPath         = require('path');                // utilities to work with files and directories
+const pkgRunSequence  = require('run-sequence');        // run tasks in sequence instead of parallel
+const pkgYargs        = require('yargs');               // parse command line arguments
 
 const argv = new pkgYargs
     .option('b', {alias: 'beep', default: false, type: 'boolean'})
     .option('d', {alias: 'dev', default: false, type: 'boolean'})
     .option('D', {alias: 'debug', default: false, type: 'boolean'})
     .option('m', {alias: 'sourcemap', default: false, type: 'boolean'})
+    .option('r', {alias: 'drupalroot', default: '', type: 'string', demand: true, demand: 'specify drupal root directory'})
     .option('s', {alias: 'style', default: '', type: 'string'})
-    .option('r', {alias: 'drupalroot', default: pkgPath.join(process.cwd(), '..'), type: 'string'})
     .option('t', {alias: 'theme', default: 'mytheme', type: 'string'})
     .argv;
 //const pkgConcat = require('gulp-concat');           // to concatenate files into one
@@ -89,8 +87,15 @@ class Log {
   }
   err(text) {
     this.raw((((this.showMessageLabel || this.debug) ? 'ERR: ' : '')
-        + text).stripColors.red
-        + this.beep);
+        + text).stripColors.red)
+    return this;
+  }
+  wrb(text) {
+    this.wrn(text + this.beep);
+    return this;
+  }
+  erb(text) {
+    this.err(text + this.beep);
     return this;
   }
   log(text) {
@@ -110,6 +115,109 @@ class Log {
   ter(text) {
     this.err(text);
     process.exit(-1);
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * Sass class that takes care of all sass processing
+ * -----------------------------------------------------------------------------
+ */
+class Sass {
+  constructor(dev=false, drupalroot='', theme='mytheme', style='compressed'
+      , sourcemap=false, debug=false) {
+    this.drupalroot = drupalroot.trim();
+    if (this.drupalroot === '') {
+      this.drupalroot = pkgPath.join(process.cwd(), '..');
+    } else if (!isValidPath(drupalroot, 'd')) {
+      log.ter('Drupal root directory ' + drupalroot + ' is not valid');
+    }
+
+    var themedir_try1 = pkgPath.join(this.drupalroot, 'themes', theme);
+    var themedir_try2 = pkgPath.join(this.drupalroot, 'themes', 'custom', theme);
+    this.themedir = ''
+    if (isValidPath(themedir_try1, 'd')) {
+      this.themedir = themedir_try1;
+    } else if (isValidPath((themedir_try2), 'd')) {
+      this.themedir = themedir_try2;
+    }
+    if (this.themedir === '') {
+      log.erb('Could not find valid Drupal theme directory at any of the following locations:')
+          .err('  - ' + themedir_try1)
+          .err('  - ' + themedir_try2)
+          .ter('Provide a valid theme name.');
+    }
+
+    this.themedir_scss = pkgPath.join(this.themedir, 'scss');
+    if (!isValidPath(this.themedir_scss, 'd')) {
+      log.erb('Could not find SCSS directory at ')
+          .err(this.themedir_scss)
+          .ter('Make sure structure of Bootstrap subtheme is correct.');
+    }
+
+    this.themedir_css = pkgPath.join(this.themedir, 'css');
+    if (!isValidPath(this.themedir_css, 'd')) {
+      log.erb('Could not find CSS directory at ')
+          .err(this.themedir_css)
+          .ter('Make sure structure of Bootstrap subtheme is correct.');
+    }
+
+    this.themefile_scss = pkgPath.join(this.themedir_scss, 'style.scss');
+    if (!isValidPath(this.themefile_scss, 'f')) {
+      log.erb('Could not find SCSS file at ')
+          .err(this.themefile_scss)
+          .ter('Make sure structure of Bootstrap subtheme is correct.');
+    }
+
+    this.style = (style === '')
+        ? (dev ? 'expanded' : 'compressed') : style.toLowerCase();
+    if (!['compact', 'compressed', 'expanded', 'nested'].includes(this.style)) {
+      log.ter('SASS Style ' + style + ' is invalid');
+    }
+    this.sourcemap = (sourcemap || dev);
+    this.debug = debug;
+    log.sep(' sass-config > ')
+        .log('Build For        : ' + (this.dev ? 'Development' : 'Production'))
+        .log('Drupal Root Dir  : ' + this.drupalroot)
+        .log('Theme Dir        : ' + this.themedir)
+        .log('Theme SCSS Dir   : ' + this.themedir_scss)
+        .log('Theme CSS Dir    : ' + this.themedir_css)
+        .log('Source Maps      : ' + (this.sourcemap ? 'Generate' : 'Remove'))
+        .log('CSS Output Style : ' + this.style)
+        .sep(' < sass-config ');
+  }
+  watch() {
+    var scssFilePattern = pkgPath.normalize(this.themedir_scss + '/**/*.scss')
+    log.sep(' sass-watch > ')
+        .log('Watching ' + scssFilePattern);
+    pkgGulp.watch(scssFilePattern, ['sass']);
+    log.sep(' < sass-watch ');
+  }
+  /* ---------------------------------------------------------------------------
+   * This task creates CSS from one single core SCSS file. It first runs the
+   * sass-clean task to remove the Sourcemaps, then based on flags, creates new
+   * Sourcemap (or not), then runs the sass preprocessor. This task does not
+   * watch any files, that job is done by other task sass-watch.
+   * ---------------------------------------------------------------------------
+   */
+  preprocess() {
+    log.sep(' sass-preprocess > ')
+        .log('Input : ' + this.themefile_scss)
+        .log('Output: ' + pkgPath.join(this.themedir_css
+            , pkgPath.basename(this.themefile_scss, pkgPath.extname(this.themefile_scss)) + '.css'))
+        .sep(' < sass-preprocess ');
+    pkgGulp.src(this.themefile_scss)                              // concerned only with one single file - style.scss
+        .pipe(pkgIf(this.sourcemap, pkgSourcemaps.init()))        // create sourcemaps only parameter set
+        .pipe(pkgSass({outputStyle: this.style}).on('error', pkgSass.logError))
+        .pipe(pkgAutoprefixer('last 2 version', 'safari 5', 'ie 7', 'ie 8', 'ie 9', 'opera 12.1', 'ios 6', 'android 4'))
+        .pipe(pkgIf(this.sourcemap, pkgSourcemaps.write('./')))   // write sourcemap only if dev build
+        .pipe(pkgGulp.dest(this.themedir_css))
+        .on('end', function() {log.don('sass-preprocess');});
+  }
+  clean() {
+    var sourceMapFilePattern = pkgPath.normalize(this.themedir_css + '/*.map');
+    log.log('Removing maps ' + sourceMapFilePattern);
+    pkgDel.sync([sourceMapFilePattern], {force: true});
+    log.don('sass-clean');
   }
 }
 
@@ -182,114 +290,13 @@ function validatePaths(pathArray) {
   for (var idx in pathArray) {
     path = pathArray[idx];
     if (!isValidPath(path[0], path[1])) {
-      log.err(`${path[0]} is not a valid ${path[1] === 'D' ? 'directory' : 'file'}`);
+      log.erb(`${path[0]} is not a valid ${path[1] === 'D' ? 'directory' : 'file'}`);
       process.exit(-1);
     }
   }
 }
 
 const log = new Log('', argv.beep, argv.debug);
-
-/* -----------------------------------------------------------------------------
- * Sass class that takes care of all sass processing
- * -----------------------------------------------------------------------------
- */
-class Sass {
-  constructor(dev=false, drupalroot='', theme='mytheme', style='compressed'
-              , sourcemap=false, debug=false) {
-    if (!isValidPath(drupalroot, 'd')) {
-      log.ter('Drupal root directory ' + drupalroot + ' is not valid');
-    }
-    this.drupalroot = drupalroot;
-
-    var themedir_try1 = pkgPath.join(this.drupalroot, 'themes', theme);
-    var themedir_try2 = pkgPath.join(this.drupalroot, 'themes', 'custom', theme);
-    this.themedir = ''
-    if (isValidPath(themedir_try1, 'd')) {
-      this.themedir = themedir_try1;
-    } else if (isValidPath((themedir_try2), 'd')) {
-      this.themedir = themedir_try2;
-    }
-    if (this.themedir === '') {
-      log.err('Could not find valid Drupal theme directory at any of the following locations:')
-          .err('  - ' + themedir_try1)
-          .err('  - ' + themedir_try2)
-          .ter('Please give a valid theme name and try again.');
-    }
-
-    this.themedir_scss = pkgPath.join(this.themedir, 'scss');
-    if (!isValidPath(this.themedir_scss, 'd')) {
-      log.err('Could not find SCSS directory at ')
-          .err(this.themedir_scss)
-          .ter('Make sure structure of Bootstrap subtheme is correct.');
-    }
-
-    this.themedir_css = pkgPath.join(this.themedir, 'css');
-    if (!isValidPath(this.themedir_css, 'd')) {
-      log.err('Could not find CSS directory at ')
-          .err(this.themedir_css)
-          .ter('Make sure structure of Bootstrap subtheme is correct.');
-    }
-
-    this.themefile_scss = pkgPath.join(this.themedir_scss, 'style.scss');
-    if (!isValidPath(this.themefile_scss, 'f')) {
-      log.err('Could not find SCSS file at ')
-          .err(this.themefile_scss)
-          .ter('Make sure structure of Bootstrap subtheme is correct.');
-    }
-
-    this.style = (style === '')
-        ? (dev ? 'expanded' : 'compressed') : style.toLowerCase();
-    if (!['compact', 'compressed', 'expanded', 'nested'].includes(this.style)) {
-      log.ter('SASS Style ' + style + ' is invalid');
-    }
-    this.sourcemap = (sourcemap || dev);
-    this.debug = debug;
-    log.sep(' sass-config > ')
-        .log('Build For        : ' + (this.dev ? 'Development' : 'Production'))
-        .log('Drupal Root Dir  : ' + this.drupalroot)
-        .log('Theme Dir        : ' + this.themedir)
-        .log('Theme SCSS Dir   : ' + this.themedir_scss)
-        .log('Theme CSS Dir    : ' + this.themedir_css)
-        .log('Source Maps      : ' + (this.sourcemap ? 'Generate' : 'Remove'))
-        .log('CSS Output Style : ' + this.style)
-        .sep(' < sass-config ');
-  }
-  watch() {
-    var scssFilePattern = pkgPath.normalize(this.themedir_scss + '/**/*.scss')
-    log.sep(' sass-watch > ')
-        .log('Watching ' + scssFilePattern);
-    pkgGulp.watch(scssFilePattern, ['sass']);
-    log.sep(' < sass-watch ');
-  }
-  /* ---------------------------------------------------------------------------
-   * This task creates CSS from one single core SCSS file. It first runs the
-   * sass-clean task to remove the Sourcemaps, then based on flags, creates new
-   * Sourcemap (or not), then runs the sass preprocessor. This task does not
-   * watch any files, that job is done by other task sass-watch.
-   * ---------------------------------------------------------------------------
-   */
-  preprocess() {
-    log.sep(' sass-preprocess > ')
-        .log('Input : ' + this.themefile_scss)
-        .log('Output: ' + pkgPath.join(this.themedir_css
-            , pkgPath.basename(this.themefile_scss, pkgPath.extname(this.themefile_scss)) + '.css'))
-        .sep(' < sass-preprocess ');
-    pkgGulp.src(this.themefile_scss)                              // concerned only with one single file - style.scss
-        .pipe(pkgIf(this.sourcemap, pkgSourcemaps.init()))        // create sourcemaps only parameter set
-        .pipe(pkgSass({outputStyle: this.style}).on('error', pkgSass.logError))
-        .pipe(pkgAutoprefixer('last 2 version', 'safari 5', 'ie 7', 'ie 8', 'ie 9', 'opera 12.1', 'ios 6', 'android 4'))
-        .pipe(pkgIf(this.sourcemap, pkgSourcemaps.write('./')))   // write sourcemap only if dev build
-        .pipe(pkgGulp.dest(this.themedir_css))
-        .on('end', function() {log.don('sass-preprocess');});
-  }
-  clean() {
-    var sourceMapFilePattern = pkgPath.normalize(this.themedir_css + '/*.map');
-    log.log('Removing maps ' + sourceMapFilePattern);
-    pkgDel.sync([sourceMapFilePattern], {force: true});
-    log.don('sass-clean');
-  }
-}
 
 function sass() {
   if (sass.singleton === undefined) {
@@ -337,26 +344,34 @@ pkgGulp.task('livereload', function() {
  */
 pkgGulp.task('usage', function() {
   log.sep(' usage > ')
-      .log('gulp [task-name] [--opt1 [opt1val]] [--opt2 [opt2val]] ...')
-      .sep('', '-')
-      .log('task-name')
-      .log('    [default]|sass-clean|sass|sass-watch')
-      .log('--beep or -b')
-      .log('    no value to be provided with this option; when set, beeps once on')
-      .log('    completion of an important task')
-      .log('--dev or -d')
-      .log('    no value to be provided with this option; when set, uses dev')
-      .log('    defaults for other options,else prod defaults - unless overridden')
-      .log('--debug or -D')
-      .log('    no value to be provided with this option; logs debug messages')
-      .log('--style or -s')
-      .log('    compact|compressed|expanded|nested')
-      .log('    CSS Output Style (cos) of CSS, if not provided, defaults to')
-      .log('    \'expanded\' for --dev and \'compressed\' otherwise')
-      .log('--source-map or -m')
-      .log('    no value to be provided with this option; when set, generates CSS)')
-      .log('    source maps, otherwise generates by default for --dev, otherwise')
-      .log('    removes')
+      .log('Usage: gulp [command] [options]')
+      .log('')
+      .log('Commands:')
+      .log('  [default]         Execute all features')
+      .log('  livereload        Watch CSS, JS and Template directories, and reload browser,')
+      .log('                    requires browser add-ons:')
+      .log('                    Chrome: https://chrome.google.com/webstore/detail/livereload/jnihajbhpnppcggbcgedagnkighmdlei')
+      .log('                    Firefox: https://addons.mozilla.org/en-US/firefox/addon/livereload-web-extension/')
+      .log('                    More info on extensions at http://livereload.com/extensions/')
+      .log('  sass-watch        Watch Sass directory and execute preprocessor')
+      .log('  sass              Execute only Sass preprocessor')
+      .log('  sass-clean        Remove *.map files')
+      .log('  usage             Display usage information')
+      .log('')
+      .log('Options:')
+      .log('  -b, --beep        Beep on completion of important task          [boolean]')
+      .log('  -d, --dev         Use Development options for building          [boolean]')
+      .log('  -D, --debug       Log debug messages                            [boolean]')
+      .log('  -r, --drupalroot  Specify Drupal root directory                [optional]')
+      .log('  -s, --style       Sass output style, compact|compressed|expanded|nested')
+      .log('  -t, --theme       Drupal theme directory name')
+      .log('  -m, --source-map  Creates sourcemap (*.map) files               [boolean]')
+      .log('')
+      .log('Examples:')
+      .log('  gulp')
+      .log('  gulp sass')
+      .log('  gulp -bdDm -r d:\\htdocs\\d8')
+      .log('  gulp --beep --drupalroot d:\\htdocs\\d8_new')
       .sep(' < usage ');
 });
 
