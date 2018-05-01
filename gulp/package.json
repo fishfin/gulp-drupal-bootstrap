@@ -3,22 +3,27 @@
   "version": "1.0.0",
   "description": "Gulp automation for Drupal-Bootstrap development",
   "main": "gulpfile.js",
+  "homepage": "https://github.com/fishfin/gulp-drupal-bootstrap",
   "scripts": {
     "test": "echo \"Error: No test specified\" && exit 1"
   },
-  "author": "Aalap Shah",
+  "author": "Fishfin",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/fishfin/gulp-drupal-bootstrap.git"
+  },
   "devDependencies": {
-    "del": "latest",
-    "fancy-log": "latest",
-    "gulp": "latest",
-    "gulp-autoprefixer": "latest",
-    "gulp-if": "latest",
-    "gulp-livereload": "latest",
-    "gulp-sass": "latest",
-    "gulp-sourcemaps": "latest",
-    "path": "latest",
-    "run-sequence": "latest",
-    "yargs": "latest"
+    "colors": "^1.2.3",
+    "del": "^3.0.0",
+    "gulp": "^3.9.1",
+    "gulp-autoprefixer": "^5.0.0",
+    "gulp-if": "^2.0.2",
+    "gulp-livereload": "^3.8.1",
+    "gulp-sass": "^4.0.1",
+    "gulp-sourcemaps": "^2.6.4",
+    "path": "^0.12.7",
+    "run-sequence": "^2.2.1",
+    "yargs": "^11.0.0"
   }
 }
