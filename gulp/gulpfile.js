@@ -233,8 +233,8 @@ function getTime() {
 };
 
 /* -----------------------------------------------------------------------------
- * Checks if a path is a valid directory or file.
- * Type can be of type 'D' or 'F' (case-insensitive).
+ * Checks if a path is a valid directory or file, type can be 'd'|'f'
+ * (case-insensitive).
  * -----------------------------------------------------------------------------
  */
 function isValidPath(path, type='d') {
