@@ -426,7 +426,7 @@ pkgGulp.task('usage', function() {
       .inf('  -t, --theme       Drupal theme directory name, use with -d')
       .inf('  -s, --scssdir     SCSS directory to watch and process, use with -c')
       .inf('  -c, --cssdir      CSS directory for SASS output, use with -s')
-      .inf('  -f, --scssfiles   SCSS files to preeprocess')
+      .inf('  -f, --scssfiles   SCSS files to preeprocess, comma-delimited')
       .inf('  -s, --style       Sass output style, compact|compressed|expanded|nested')
       .inf('  -m, --source-map  Creates sourcemap (*.map) files               [boolean]')
       .inf('Examples:', 'cyan')
