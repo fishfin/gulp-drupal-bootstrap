@@ -264,7 +264,7 @@ class Sass {
         .inf('Output:')
         .inf(pkgPath.join(this.cssdir, '*.css'), '', 2)
         .sep(' < sass-preprocess ');
-    pkgGulp.src(this.scssfiles)                              // concerned only with one single file - style.scss
+    pkgGulp.src(this.scssfilepaths)                               // concerned only with one single file - style.scss
         .pipe(pkgIf(this.sourcemap, pkgSourcemaps.init()))        // create sourcemaps only parameter set
         .pipe(pkgSass({outputStyle: this.style}).on('error', pkgSass.logError))
         .pipe(pkgAutoprefixer('last 2 version', 'safari 5', 'ie 7', 'ie 8', 'ie 9', 'opera 12.1', 'ios 6', 'android 4'))
