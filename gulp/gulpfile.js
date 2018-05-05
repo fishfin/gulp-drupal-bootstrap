@@ -115,7 +115,7 @@ class Log {
         + char.repeat(length - 2 - text.length).white);
   }
   ter(text, indent=0) {
-    this.err(text, indent, true);
+    this.err(text, '', indent, true);
     process.exit(-1);
   }
 }
@@ -212,6 +212,9 @@ class Sass {
       }
       this.scssdir = pkgPath.join(themedir, 'scss');
       this.cssdir = pkgPath.join(themedir, 'css');
+    } else {
+      log.err('Insufficient arguments, cannot proceed')
+          .ter('Use -d, -t or -s, -c');
     }
 
     scssfiles = (scssfiles === '' ? ['style.scss'] : scssfiles.split(','));
