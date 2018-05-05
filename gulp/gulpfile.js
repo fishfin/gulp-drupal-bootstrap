@@ -224,7 +224,7 @@ class Sass {
         this.scssfiles.push(scssfiles[idx]);
         this.scssfilepaths.push(scssfilepath);
       } else {
-        log.ter('SCSS file \'' + scssfilepath + ' is invalid', 0, true);
+        log.ter('SCSS file \'' + scssfilepath + '\' is invalid', 0, true);
       }
     }
 
@@ -235,20 +235,19 @@ class Sass {
     }
     this.sourcemap = (sourcemap || this.dev);
     log.sep(' sass-config > ')
-        .inf('Build For  : ' + (this.dev ? 'Development' : 'Production'))
-        .inf('SCSS Dir   : ' + this.scssdir)
-        .inf('SCSS Files : ' + this.scssfiles)
-        .inf('CSS Dir    : ' + this.cssdir)
-        .inf('Source Maps: ' + (this.sourcemap ? 'Generate' : 'Remove'))
-        .inf('CSS Style  : ' + this.style)
+        .inf('Build For           : ' + (this.dev ? 'Development' : 'Production'))
+        .inf('SCSS Dir            : ' + this.scssdir)
+        .inf('SCSS Files (Watch)  : ' + pkgPath.join('**', '*.scss'))
+        .inf('SCSS Files (Process): ' + this.scssfiles)
+        .inf('CSS Dir             : ' + this.cssdir)
+        .inf('Source Maps         : ' + (this.sourcemap ? 'Generate' : 'Remove'))
+        .inf('CSS Style           : ' + this.style)
         .sep(' < sass-config ');
   }
   watch() {
     var scssFilePattern = pkgPath.normalize(this.scssdir + '/**/*.scss');
-    log.sep(' sass-watch > ')
-        .inf('Watching ' + scssFilePattern);
+    log.inf('Watching ' + scssFilePattern);
     pkgGulp.watch(scssFilePattern, ['sass']);
-    log.sep(' < sass-watch ');
   }
   /* ---------------------------------------------------------------------------
    * This task creates CSS from one single core SCSS file. It first runs the
@@ -258,12 +257,6 @@ class Sass {
    * ---------------------------------------------------------------------------
    */
   preprocess() {
-    log.sep(' sass-preprocess > ')
-        .inf('Input :')
-        .inf(this.scssfilepaths, '', 2)
-        .inf('Output:')
-        .inf(pkgPath.join(this.cssdir, '*.css'), '', 2)
-        .sep(' < sass-preprocess ');
     pkgGulp.src(this.scssfilepaths)                               // concerned only with one single file - style.scss
         .pipe(pkgIf(this.sourcemap, pkgSourcemaps.init()))        // create sourcemaps only parameter set
         .pipe(pkgSass({outputStyle: this.style}).on('error', pkgSass.logError))
