@@ -19,7 +19,7 @@
  */
 
 const version = '1.0.0'                                 // script version
-const pkgColors       = require('colors');              // colors to console
+const pkgColors       = require('colors');              // colors to console, provides additional String.prototype
 const pkgDel          = require('del');                 // to delete directories and files
 const pkgFs           = require('fs');                  // interact with file system, like check if file exists etc. does not require entry in package.json
 const pkgGulp         = require('gulp');                // automation engine
@@ -33,13 +33,16 @@ const pkgRunSequence  = require('run-sequence');        // run tasks in sequence
 const pkgYargs        = require('yargs');               // parse command line arguments
 
 const argv = new pkgYargs
-    .option('b', {alias: 'beep', default: false, type: 'boolean'})
-    .option('d', {alias: 'dev', default: false, type: 'boolean'})
-    .option('D', {alias: 'debug', default: false, type: 'boolean'})
+    .option('B', {alias: 'beep', default: false, type: 'boolean'})
+    .option('D', {alias: 'dev', default: false, type: 'boolean'})
+    .option('G', {alias: 'debug', default: false, type: 'boolean'})
+    .option('d', {alias: 'drupalroot', default: '', type: 'string'})
+    .option('t', {alias: 'theme', default: '', type: 'string'})
     .option('m', {alias: 'sourcemap', default: false, type: 'boolean'})
-    .option('r', {alias: 'drupalroot', default: '', type: 'string', demand: true, demand: 'specify drupal root directory'})
-    .option('s', {alias: 'style', default: '', type: 'string'})
-    .option('t', {alias: 'theme', default: 'mytheme', type: 'string'})
+    .option('y', {alias: 'style', default: '', type: 'string'})
+    .option('s', {alias: 'scssdir', default: '', type: 'string'})
+    .option('c', {alias: 'cssdir', default:'', type: 'string'})
+    .option('f', {alias: 'scssfiles', default:'', type: 'string'})
     .argv;
 //const pkgConcat = require('gulp-concat');           // to concatenate files into one
 //const pkgUglify = require('gulp-uglify');           // minify js, optional, comment out if not used
@@ -52,68 +55,67 @@ const argv = new pkgYargs
  * -----------------------------------------------------------------------------
  */
 class Log {
-  constructor(prefix='', beep=false, debug=false, showMessageLabel=true) {
+  constructor(prefix='', beep=false, debug=false) {
     this.prefix = prefix.toString();
     if (this.prefix !== '') {
-      this.prefix = fixLength(this.prefix.toUpperCase(), 8, ' ', true);
+      this.prefix = fitLength(this.prefix.toUpperCase(), 8, ' ', true);
     }
     this.beep = (beep ? '\x07' : '');
     this.debug = debug;
-    this.showMessageLabel = showMessageLabel;
   }
-  raw(text) {
+  log(text, color='', type='', indent=0, beep=false, prefix='') {
+    if (Array.isArray(text)) {
+      for (var idx in text) {
+        this.log(text[idx], color, type, indent, beep, prefix);
+      }
+    } else if (type !== 'd' || this.debug) {
+      switch (type) {
+        case 'w':
+          type = 'WRN '.yellow;
+          break;
+        case 'e':
+          type = 'ERR '.red;
+          break;
+        case 'd':
+          type = 'DBG '.grey;
+          break;
+        default:
+          type = '';
+      }
       console.log('['.white
-          + (this.prefix === '' ? getTime() : this.prefix).grey
+          + (prefix === ''
+              ? (this.prefix === '' ? getTime() : this.prefix)
+              : fitLength(prefix.toUpperCase(),8, ' ', true)).stripColors.grey
           + '] '.white
-          + text);
-      return this;
-  }
-  dbg(text) {
-    if (this.debug) {
-      this.raw(('DBG: ' + text).stripColors.grey);
+          + type
+          + ' '.repeat(indent)
+          + (color==='' ? text : text.stripColors[color])
+          + (beep ? this.beep : ''));
     }
     return this;
   }
-  inf(text) {
-    this.raw((((this.showMessageLabel || this.debug) ? 'INF: ' : '')
-        + text).stripColors.cyan);
-    return this;
+  dbg(text, indent=0, beep=false) {
+    return this.log(text, 'grey', 'd', indent, beep);
   }
-  wrn(text) {
-    this.raw((((this.showMessageLabel || this.debug) ? 'WRN: ' : '')
-        + text).stripColors.yellow
-        + this.beep);
-    return this;
+  inf(text, indent=0, beep=false) {
+    return this.log(text, 'white', '', indent, beep);
   }
-  err(text) {
-    this.raw((((this.showMessageLabel || this.debug) ? 'ERR: ' : '')
-        + text).stripColors.red)
-    return this;
+  wrn(text, indent=0, beep=false) {
+    return this.log(text, 'yellow', 'w', indent, beep);
   }
-  wrb(text) {
-    this.wrn(text + this.beep);
-    return this;
-  }
-  erb(text) {
-    this.err(text + this.beep);
-    return this;
-  }
-  log(text) {
-    this.raw(text.stripColors);
-    return this;
+  err(text, indent=0, beep=false) {
+    return this.log(text, 'red', 'e', indent, beep);
   }
   don(text) {
-    this.raw((text.toUpperCase() + ' Done').yellow + this.beep);
-    return this;
+    return this.log((text.toUpperCase() + ' Done'), 'yellow', '', 0, true);
   }
   sep(text='', char='=', length=69) {
-    this.raw(char.repeat(2).white
+    return this.log(char.repeat(2).white
         + text.toUpperCase().green
         + char.repeat(length - 2 - text.length).white);
-    return this;
   }
-  ter(text) {
-    this.err(text);
+  ter(text, indent=0) {
+    this.err(text, indent, true);
     process.exit(-1);
   }
 }
@@ -123,72 +125,125 @@ class Log {
  * -----------------------------------------------------------------------------
  */
 class Sass {
-  constructor(dev=false, drupalroot='', theme='mytheme', style='compressed'
-      , sourcemap=false, debug=false) {
-    this.drupalroot = drupalroot.trim();
-    if (this.drupalroot === '') {
-      this.drupalroot = pkgPath.join(process.cwd(), '..');
-    } else if (!isValidPath(drupalroot, 'd')) {
-      log.ter('Drupal root directory ' + drupalroot + ' is not valid');
+  constructor(dev=false, style='compressed', sourcemap=false
+              , scssdir='', cssdir='', scssfiles=''
+              , drupalroot='', theme=''
+              , debug=false) {
+    this.dev = dev;
+    this.debug = debug;
+    this.scssdir = this.cssdir = '';
+    this.scssfiles = [];
+    this.scssfilepaths = [];
+
+    if (scssdir !== '' || cssdir !== '') {
+      if (scssdir !== '') {
+        if (!isValidPath(scssdir, 'd')) {
+          log.ter('SCSS directory \'' + scssdir + '\' is not valid');
+        } else {
+          this.scssdir = scssdir;
+        }
+        if (cssdir === '') {
+          log.inf('CSS directory not known, trying to locate...');
+          var cssdir_try = [
+              pkgPath.join(this.scssdir, '..', 'css'),
+              pkgPath.join(this.scssdir, 'css'),
+          ];
+          for (var idx in cssdir_try) {
+            log.inf('Checking CSS directory ' + cssdir_try[idx]);
+            if (isValidPath(cssdir_try[idx], 'd')) {
+              this.cssdir = cssdir_try[idx];
+              break;
+            }
+          }
+          if (this.cssdir === '') {
+            log.ter('Provide valid CSS directory');
+          }
+        }
+      }
+      if (cssdir !== '') {
+        if (!isValidPath(cssdir, 'd')) {
+          log.ter('CSS directory \'' + cssdir + '\' is not valid');
+        } else {
+          this.cssdir = cssdir;
+        }
+        if (scssdir === '') {
+          log.inf('SCSS directory not known, trying to locate...');
+          var scssdir_try = [
+            pkgPath.join(this.cssdir, '..', 'scss'),
+            pkgPath.join(this.cssdir, 'scss'),
+          ];
+          for (var idx in scssdir_try) {
+            log.inf('Checking SCSS directory ' + scssdir_try[idx]);
+            if (isValidPath(scssdir_try[idx], 'd')) {
+              this.scssdir = scssdir_try[idx];
+              break;
+            }
+          }
+          if (this.scssdir === '') {
+            log.ter('Provide valid SCSS directory');
+          }
+        }
+      }
+    } else if (drupalroot !== '' || theme !== '') {
+      if (drupalroot === '') {
+        drupalroot = pkgPath.join(process.cwd(), '..');
+      } else if (!isValidPath(drupalroot, 'd')) {
+        log.ter('Drupal root directory \'' + drupalroot + '\' is not valid');
+      }
+
+      if (theme === '') {
+        log.ter('Drupal is indicated, but no theme name was supplied');
+      }
+      var themedir_try = [
+          pkgPath.join(drupalroot, 'themes', theme)
+        , pkgPath.join(drupalroot, 'themes', 'custom', theme)
+      ];
+      var themedir = '';
+      for (var idx in themedir_try) {
+        log.inf('Checking theme directory ' + themedir_try[idx]);
+        if (isValidPath(themedir_try[idx], 'd')) {
+          themedir = themedir_try[idx];
+          break;
+        }
+      }
+      if (themedir === '') {
+        log.err('Could not find valid Drupal theme directory', 0, true)
+            .ter('Provide a valid theme name');
+      }
+      this.scssdir = pkgPath.join(themedir, 'scss');
+      this.cssdir = pkgPath.join(themedir, 'css');
     }
 
-    var themedir_try1 = pkgPath.join(this.drupalroot, 'themes', theme);
-    var themedir_try2 = pkgPath.join(this.drupalroot, 'themes', 'custom', theme);
-    this.themedir = ''
-    if (isValidPath(themedir_try1, 'd')) {
-      this.themedir = themedir_try1;
-    } else if (isValidPath((themedir_try2), 'd')) {
-      this.themedir = themedir_try2;
-    }
-    if (this.themedir === '') {
-      log.erb('Could not find valid Drupal theme directory at any of the following locations:')
-          .err('  - ' + themedir_try1)
-          .err('  - ' + themedir_try2)
-          .ter('Provide a valid theme name.');
-    }
-
-    this.themedir_scss = pkgPath.join(this.themedir, 'scss');
-    if (!isValidPath(this.themedir_scss, 'd')) {
-      log.erb('Could not find SCSS directory at ')
-          .err(this.themedir_scss)
-          .ter('Make sure structure of Bootstrap subtheme is correct.');
-    }
-
-    this.themedir_css = pkgPath.join(this.themedir, 'css');
-    if (!isValidPath(this.themedir_css, 'd')) {
-      log.erb('Could not find CSS directory at ')
-          .err(this.themedir_css)
-          .ter('Make sure structure of Bootstrap subtheme is correct.');
-    }
-
-    this.themefile_scss = pkgPath.join(this.themedir_scss, 'style.scss');
-    if (!isValidPath(this.themefile_scss, 'f')) {
-      log.erb('Could not find SCSS file at ')
-          .err(this.themefile_scss)
-          .ter('Make sure structure of Bootstrap subtheme is correct.');
+    scssfiles = (scssfiles === '' ? ['style.scss'] : scssfiles.split(','));
+    for (var idx in scssfiles) {
+      var scssfilepath = pkgPath.join(this.scssdir, scssfiles[idx]);
+      if (isValidPath(scssfilepath, 'f')) {
+        this.scssfiles.push(scssfiles[idx]);
+        this.scssfilepaths.push(scssfilepath);
+      } else {
+        log.ter('SCSS file \'' + scssfilepath + ' is invalid', 0, true);
+      }
     }
 
     this.style = (style === '')
-        ? (dev ? 'expanded' : 'compressed') : style.toLowerCase();
+        ? (this.dev ? 'expanded' : 'compressed') : style.toLowerCase();
     if (!['compact', 'compressed', 'expanded', 'nested'].includes(this.style)) {
       log.ter('SASS Style ' + style + ' is invalid');
     }
-    this.sourcemap = (sourcemap || dev);
-    this.debug = debug;
+    this.sourcemap = (sourcemap || this.dev);
     log.sep(' sass-config > ')
-        .log('Build For      : ' + (this.dev ? 'Development' : 'Production'))
-        .log('Drupal Root Dir: ' + this.drupalroot)
-        .log('Theme Dir      : ' + this.themedir)
-        .log('Theme SCSS Dir : ' + this.themedir_scss)
-        .log('Theme CSS Dir  : ' + this.themedir_css)
-        .log('Source Maps    : ' + (this.sourcemap ? 'Generate' : 'Remove'))
-        .log('CSS Style      : ' + this.style)
+        .inf('Build For  : ' + (this.dev ? 'Development' : 'Production'))
+        .inf('SCSS Dir   : ' + this.scssdir)
+        .inf('SCSS Files : ' + this.scssfiles)
+        .inf('CSS Dir    : ' + this.cssdir)
+        .inf('Source Maps: ' + (this.sourcemap ? 'Generate' : 'Remove'))
+        .inf('CSS Style  : ' + this.style)
         .sep(' < sass-config ');
   }
   watch() {
-    var scssFilePattern = pkgPath.normalize(this.themedir_scss + '/**/*.scss')
+    var scssFilePattern = pkgPath.normalize(this.scssdir + '/**/*.scss');
     log.sep(' sass-watch > ')
-        .log('Watching ' + scssFilePattern);
+        .inf('Watching ' + scssFilePattern);
     pkgGulp.watch(scssFilePattern, ['sass']);
     log.sep(' < sass-watch ');
   }
@@ -201,21 +256,22 @@ class Sass {
    */
   preprocess() {
     log.sep(' sass-preprocess > ')
-        .log('Input : ' + this.themefile_scss)
-        .log('Output: ' + pkgPath.join(this.themedir_css
-            , pkgPath.basename(this.themefile_scss, pkgPath.extname(this.themefile_scss)) + '.css'))
+        .inf('Input :')
+        .inf(this.scssfilepaths, 2)
+        .inf('Output:')
+        .inf(pkgPath.join(this.cssdir, '*.css'), 2)
         .sep(' < sass-preprocess ');
-    pkgGulp.src(this.themefile_scss)                              // concerned only with one single file - style.scss
+    pkgGulp.src(this.scssfiles)                              // concerned only with one single file - style.scss
         .pipe(pkgIf(this.sourcemap, pkgSourcemaps.init()))        // create sourcemaps only parameter set
         .pipe(pkgSass({outputStyle: this.style}).on('error', pkgSass.logError))
         .pipe(pkgAutoprefixer('last 2 version', 'safari 5', 'ie 7', 'ie 8', 'ie 9', 'opera 12.1', 'ios 6', 'android 4'))
         .pipe(pkgIf(this.sourcemap, pkgSourcemaps.write('./')))   // write sourcemap only if dev build
-        .pipe(pkgGulp.dest(this.themedir_css))
+        .pipe(pkgGulp.dest(this.cssdir))
         .on('end', function() {log.don('sass-preprocess');});
   }
   clean() {
-    var sourceMapFilePattern = pkgPath.normalize(this.themedir_css + '/*.map');
-    log.log('Removing maps ' + sourceMapFilePattern);
+    var sourceMapFilePattern = pkgPath.normalize(this.cssdir + '/*.map');
+    log.inf('Removing maps ' + sourceMapFilePattern);
     pkgDel.sync([sourceMapFilePattern], {force: true});
     log.don('sass-clean');
   }
@@ -227,9 +283,9 @@ class Sass {
  */
 function getTime() {
   now = new Date();
-  return fixLength(now.getHours(), 2, '0') + ':'
-      + fixLength(now.getMinutes(), 2, '0') + ':'
-      + fixLength(now.getSeconds(), 2, '0');
+  return fitLength(now.getHours(), 2, '0') + ':'
+      + fitLength(now.getMinutes(), 2, '0') + ':'
+      + fitLength(now.getSeconds(), 2, '0');
 };
 
 /* -----------------------------------------------------------------------------
@@ -256,7 +312,7 @@ function isValidPath(path, type='d') {
  * smaller, adds directional padding, else substrings
  * -----------------------------------------------------------------------------
  */
-function fixLength(text, targetLength, padChar=' ', padRight=false) {
+function fitLength(text, targetLength, padChar=' ', padRight=false) {
   text = text.toString();
   padChar = padChar.toString();
   padLength = targetLength - text.length;
@@ -275,10 +331,10 @@ function fixLength(text, targetLength, padChar=' ', padRight=false) {
  * -----------------------------------------------------------------------------
  */
 function showWelcomeMessage() {
-  log.log('gulp-drupal-bootstrap, v' + version)
-      .log('Gulp automation for Drupal-Bootstrap development')
-      .log('Developed by Fishfin (https://github.com/fishfin), 2018')
-      .log('Use \'gulp usage\' for help, Ctrl+C to terminate');
+  log.inf('gulp-drupal-bootstrap, v' + version)
+      .inf('Gulp automation for Drupal-Bootstrap development')
+      .inf('Developed by Fishfin (https://github.com/fishfin), 2018')
+      .inf('Use \'gulp usage\' for help, Ctrl+C to terminate');
 }
 
 /* -----------------------------------------------------------------------------
@@ -290,7 +346,8 @@ function validatePaths(pathArray) {
   for (var idx in pathArray) {
     path = pathArray[idx];
     if (!isValidPath(path[0], path[1])) {
-      log.erb(`${path[0]} is not a valid ${path[1] === 'D' ? 'directory' : 'file'}`);
+      log.err(`${path[0]} is not a valid ${path[1] === 'D' ? 'directory' : 'file'}
+        `, 0, true);
       process.exit(-1);
     }
   }
@@ -300,8 +357,10 @@ const log = new Log('', argv.beep, argv.debug);
 
 function sass() {
   if (sass.singleton === undefined) {
-    sass.singleton = new Sass(argv.dev, argv.drupalroot, argv.theme, argv.style
-        , argv.sourcemap, argv.debug);
+    sass.singleton = new Sass(argv.dev, argv.style, argv.sourcemap
+        , argv.scssdir, argv.cssdir, argv.scssfiles
+        , argv.drupalroot, argv.theme
+        , argv.debug);
   }
   return sass.singleton;
 }
@@ -344,34 +403,31 @@ pkgGulp.task('livereload', function() {
  */
 pkgGulp.task('usage', function() {
   log.sep(' usage > ')
-      .log('Usage: gulp [command] [options]')
-      .log('')
-      .log('Commands:')
-      .log('  [default]         Execute all features')
-      .log('  livereload        Watch CSS, JS and Template directories, and reload browser,')
-      .log('                    requires browser add-ons:')
-      .log('                    Chrome: https://chrome.google.com/webstore/detail/livereload/jnihajbhpnppcggbcgedagnkighmdlei')
-      .log('                    Firefox: https://addons.mozilla.org/en-US/firefox/addon/livereload-web-extension/')
-      .log('                    More info on extensions at http://livereload.com/extensions/')
-      .log('  sass-watch        Watch Sass directory and execute preprocessor')
-      .log('  sass              Execute only Sass preprocessor')
-      .log('  sass-clean        Remove *.map files')
-      .log('  usage             Display usage information')
-      .log('')
-      .log('Options:')
-      .log('  -b, --beep        Beep on completion of important task          [boolean]')
-      .log('  -d, --dev         Use Development options for building          [boolean]')
-      .log('  -D, --debug       Log debug messages                            [boolean]')
-      .log('  -r, --drupalroot  Specify Drupal root directory                [optional]')
-      .log('  -s, --style       Sass output style, compact|compressed|expanded|nested')
-      .log('  -t, --theme       Drupal theme directory name')
-      .log('  -m, --source-map  Creates sourcemap (*.map) files               [boolean]')
-      .log('')
-      .log('Examples:')
-      .log('  gulp')
-      .log('  gulp sass')
-      .log('  gulp -bdDm -r d:\\htdocs\\d8')
-      .log('  gulp --beep --drupalroot d:\\htdocs\\d8_new')
+      .inf('Usage: gulp [command] [options]'.cyan)
+      .inf('Commands:'.cyan)
+      .inf('  [default]         Execute all features')
+      .inf('  livereload        Watch CSS, JS and Template directories, and reload browser,')
+      .inf('                    requires browser add-ons:')
+      .inf('                    Chrome: https://chrome.google.com/webstore/detail/livereload/jnihajbhpnppcggbcgedagnkighmdlei')
+      .inf('                    Firefox: https://addons.mozilla.org/en-US/firefox/addon/livereload-web-extension/')
+      .inf('                    More info on extensions at http://livereload.com/extensions/')
+      .inf('  sass-watch        Watch Sass directory and execute preprocessor')
+      .inf('  sass              Execute only Sass preprocessor')
+      .inf('  sass-clean        Remove *.map files')
+      .inf('  usage             Display usage information')
+      .inf('Options:'.cyan)
+      .inf('  -B, --beep        Beep on completion of important task          [boolean]')
+      .inf('  -D, --dev         Use Development options for building          [boolean]')
+      .inf('  -G, --debug       Log debug messages                            [boolean]')
+      .inf('  -d, --drupalroot  Specify Drupal root directory                [optional]')
+      .inf('  -t, --theme       Drupal theme directory name')
+      .inf('  -s, --style       Sass output style, compact|compressed|expanded|nested')
+      .inf('  -m, --source-map  Creates sourcemap (*.map) files               [boolean]')
+      .inf('Examples:'.cyan)
+      .inf('  gulp')
+      .inf('  gulp sass')
+      .inf('  gulp -BDdm -r d:\\htdocs\\d8 -t=darkthm')
+      .inf('  gulp --beep --drupalroot d:\\htdocs\\d8_new')
       .sep(' < usage ');
 });
 
