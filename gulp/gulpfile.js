@@ -260,9 +260,9 @@ class Sass {
   preprocess() {
     log.sep(' sass-preprocess > ')
         .inf('Input :')
-        .inf(this.scssfilepaths, 2)
+        .inf(this.scssfilepaths, '', 2)
         .inf('Output:')
-        .inf(pkgPath.join(this.cssdir, '*.css'), 2)
+        .inf(pkgPath.join(this.cssdir, '*.css'), '', 2)
         .sep(' < sass-preprocess ');
     pkgGulp.src(this.scssfiles)                              // concerned only with one single file - style.scss
         .pipe(pkgIf(this.sourcemap, pkgSourcemaps.init()))        // create sourcemaps only parameter set
