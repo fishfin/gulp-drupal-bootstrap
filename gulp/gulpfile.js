@@ -94,17 +94,17 @@ class Log {
     }
     return this;
   }
-  dbg(text, indent=0, beep=false) {
-    return this.log(text, 'grey', 'd', indent, beep);
+  dbg(text, color='grey', indent=0, beep=false) {
+    return this.log(text, (color === '' ? 'grey' : color), 'd', indent, beep);
   }
-  inf(text, indent=0, beep=false) {
-    return this.log(text, 'white', '', indent, beep);
+  inf(text, color='white', indent=0, beep=false) {
+    return this.log(text, (color === '' ? 'white' : color), '', indent, beep);
   }
-  wrn(text, indent=0, beep=false) {
-    return this.log(text, 'yellow', 'w', indent, beep);
+  wrn(text, color='yellow', indent=0, beep=false) {
+    return this.log(text, (color === '' ? 'yellow' : color), 'w', indent, beep);
   }
-  err(text, indent=0, beep=false) {
-    return this.log(text, 'red', 'e', indent, beep);
+  err(text, color='red', indent=0, beep=false) {
+    return this.log(text, (color === '' ? 'red' : color), 'e', indent, beep);
   }
   don(text) {
     return this.log((text.toUpperCase() + ' Done'), 'yellow', '', 0, true);
@@ -403,8 +403,8 @@ pkgGulp.task('livereload', function() {
  */
 pkgGulp.task('usage', function() {
   log.sep(' usage > ')
-      .inf('Usage: gulp [command] [options]'.cyan)
-      .inf('Commands:'.cyan)
+      .inf('Usage: gulp [command] [options]', 'cyan')
+      .inf('Commands:', 'cyan')
       .inf('  [default]         Execute all features')
       .inf('  livereload        Watch CSS, JS and Template directories, and reload browser,')
       .inf('                    requires browser add-ons:')
@@ -415,7 +415,7 @@ pkgGulp.task('usage', function() {
       .inf('  sass              Execute only Sass preprocessor')
       .inf('  sass-clean        Remove *.map files')
       .inf('  usage             Display usage information')
-      .inf('Options:'.cyan)
+      .inf('Options:', 'cyan')
       .inf('  -B, --beep        Beep on completion of important task          [boolean]')
       .inf('  -D, --dev         Use Development options for building          [boolean]')
       .inf('  -G, --debug       Log debug messages                            [boolean]')
@@ -423,7 +423,7 @@ pkgGulp.task('usage', function() {
       .inf('  -t, --theme       Drupal theme directory name')
       .inf('  -s, --style       Sass output style, compact|compressed|expanded|nested')
       .inf('  -m, --source-map  Creates sourcemap (*.map) files               [boolean]')
-      .inf('Examples:'.cyan)
+      .inf('Examples:', 'cyan')
       .inf('  gulp')
       .inf('  gulp sass')
       .inf('  gulp -BDdm -r d:\\htdocs\\d8 -t=darkthm')
