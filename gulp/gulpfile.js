@@ -266,7 +266,7 @@ class Sass {
         .on('end', function() {log.don('sass-preprocess');});
   }
   clean() {
-    var sourceMapFilePattern = pkgPath.normalize(this.cssdir + '/*.map');
+    var sourceMapFilePattern = pkgPath.join(this.cssdir, '*.map');
     log.inf('Removing maps ' + sourceMapFilePattern);
     pkgDel.sync([sourceMapFilePattern], {force: true});
     log.don('sass-clean');
