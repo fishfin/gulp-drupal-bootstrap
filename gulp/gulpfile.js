@@ -11,7 +11,7 @@
  *     you could do the following:
  *     function myFunc() {
  *       if (myFunc.staticVar === undefined) {
- *         myFunc.staticVar = true     // now no longer undefined
+ *         myFunc.staticVar = true     // no longer undefined
  *         ...                         // do something for the first invocation
  *       }
  *     }
@@ -144,7 +144,8 @@ function imagemin() {
           .wrn('Did you miss the parameter to add image directories?');
     } else {
       log.sep(' imagemin-config > ')
-          .inf('Image Directory: ' + imagemin.singleton.filep, '', 2)
+          .inf('Image Directories: ')
+          .inf(imagemin.singleton.items, '', 2)
           .sep(' < imagemin-config ');
     }
   }
