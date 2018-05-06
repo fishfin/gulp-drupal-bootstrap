@@ -134,13 +134,16 @@ class Sass {
     this.scssdir = this.cssdir = '';
     this.scssfiles = [];
     this.scssfilepaths = [];
+    this.templatedir = '';
+
+    var referencedir = '';
 
     if (scssdir !== '' || cssdir !== '') {
       if (scssdir !== '') {
         if (!isValidPath(scssdir, 'd')) {
           log.ter('SCSS directory \'' + scssdir + '\' is not valid');
         } else {
-          this.scssdir = scssdir;
+          referencedir = this.scssdir = scssdir;
         }
         if (cssdir === '') {
           log.inf('CSS directory not known, trying to locate...');
@@ -164,7 +167,7 @@ class Sass {
         if (!isValidPath(cssdir, 'd')) {
           log.ter('CSS directory \'' + cssdir + '\' is not valid');
         } else {
-          this.cssdir = cssdir;
+          referencedir = this.cssdir = cssdir;
         }
         if (scssdir === '') {
           log.inf('SCSS directory not known, trying to locate...');
@@ -210,11 +213,17 @@ class Sass {
         log.err('Could not find valid Drupal theme directory', 0, true)
             .ter('Provide a valid theme name');
       }
-      this.scssdir = pkgPath.join(themedir, 'scss');
+      referencedir = this.scssdir = pkgPath.join(themedir, 'scss');
       this.cssdir = pkgPath.join(themedir, 'css');
     } else {
       log.err('Insufficient arguments, cannot proceed')
           .ter('Use -d, -t or -s, -c');
+    }
+
+    var templatedir = pkgPath.join(referencedir, '..', 'templates');
+    if (isValidPath(templatedir, 'd')) {
+      this.templatedir = templatedir;
+      log.inf('Template directory detected ' + this.templatedir);
     }
 
     scssfiles = (scssfiles === '' ? ['style.scss'] : scssfiles.split(','));
@@ -385,10 +394,19 @@ pkgGulp.task('sass-watch', ['sass'], function() {
 
 pkgGulp.task('livereload', function() {
   sass();
+  var livereloadwatch = [
+    pkgPath.join(sass.singleton.cssdir, '*.css'),
+  ];
+  if (sass.singleton.templatedir !== '') {
+    livereloadwatch.push(pkgPath.join(sass.singleton.templatedir, '**', '*.twig'));
+  }
+  log.sep(' livereload-config > ')
+      .inf('Watching for LiveReload:')
+      .inf(livereloadwatch, '', 2)
+      .sep(' < livereload-config ');
   pkgLivereload.listen();
   //pkgGulp.watch('./wp-content/themes/olympos/lib/*.js', ['uglify']);
-  pkgGulp.watch([pkgPath.normalize(sass.singleton.themedir_css + '/*.css')
-      , pkgPath.normalize(sass.singleton.themedir + '/templates/**/*.twig')]
+  pkgGulp.watch(livereloadwatch
       , function(files) {pkgLivereload.changed(files) });
 });
 
