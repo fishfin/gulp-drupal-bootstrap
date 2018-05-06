@@ -125,7 +125,7 @@ class Log {
 
 function imagemin() {
   if (imagemin.singleton ===  undefined) {
-    imagemin.singleton = new FileArray(argv.imagemin);
+    imagemin.singleton = new ItemArray(argv.imagemin);
 
     if (sass.singleton !== undefined) {
       imagemin.singleton.add([
@@ -135,8 +135,8 @@ function imagemin() {
     }
 
     imagemin.singleton.filep = [];
-    for (var idx in imagemin.singleton.files) {
-      imagemin.singleton.filep.push(pkgPath.join(imagemin.singleton.files[idx], '*'));
+    for (var idx in imagemin.singleton.items) {
+      imagemin.singleton.filep.push(pkgPath.join(imagemin.singleton.items[idx], '*'));
     }
 
     if (imagemin.singleton.filep.length === 0) {
@@ -144,7 +144,7 @@ function imagemin() {
           .wrn('Did you miss the parameter to add image directories?');
     } else {
       log.sep(' imagemin-config > ')
-          .inf(imagemin.singleton.filep, '', 2)
+          .inf('Image Directory: ' + imagemin.singleton.filep, '', 2)
           .sep(' < imagemin-config ');
     }
   }
@@ -352,41 +352,41 @@ class Sass {
   }
 }
 
-class FileArray {
-  constructor(files, filedelim=',', verbose=false) {
-    this.files = [];
+class ItemArray {
+  constructor(items, filedelim=',', verbose=false) {
+    this.items = [];
     this.filedelim = filedelim;
-    this.add(files);
+    this.add(items);
     return this;
   }
-  add(files) {
-    if (!Array.isArray(files)
-        && files.indexOf(this.filedelim) >= 0) {
-      files = files.split(this.filedelim);
+  add(items) {
+    if (!Array.isArray(items)
+        && items.indexOf(this.filedelim) >= 0) {
+      items = items.split(this.filedelim);
     }
-    if (Array.isArray(files)) {
-      for (var idx in files) {
-        this.add(files[idx]);
+    if (Array.isArray(items)) {
+      for (var idx in items) {
+        this.add(items[idx]);
       }
-    } else if ((files = files.trim()) !== '') {
-      this.remove(files);
-      this.files.push(files);
+    } else if ((items = items.trim()) !== '') {
+      this.remove(items);
+      this.items.push(items);
     }
     return this;
   }
-  remove(files) {
-    if (!Array.isArray(files)
-        && files.indexOf(this.filedelim) >= 0) {
-      files = files.split(this.filedelim);
+  remove(items) {
+    if (!Array.isArray(items)
+        && items.indexOf(this.filedelim) >= 0) {
+      items = items.split(this.filedelim);
     }
-    if (Array.isArray(files)) {
-      for (var idx in files) {
-        this.remove(files[idx]);
+    if (Array.isArray(items)) {
+      for (var idx in items) {
+        this.remove(items[idx]);
       }
-    } else if ((files = files.trim()) !== '') {
-      for (var idx in this.files) {
-        if (files.trim === this.files[idx]) {
-          this.files.splice(idx, 1);
+    } else if ((items = items.trim()) !== '') {
+      for (var idx in this.items) {
+        if (items.trim === this.items[idx]) {
+          this.items.splice(idx, 1);
         }
       }
     }
@@ -495,22 +495,22 @@ pkgGulp.task('sass-watch', ['sass'], function() {
 });
 
 pkgGulp.task('livereload', function() {
-  var srcfiles = new FileArray(argv.livereload);
+  var srcfiles = new ItemArray(argv.livereload);
   if (sass.singleton !== undefined) {
     srcfiles.add([sass.singleton.cssfiles,  sass.singleton.templatefiles]);
   }
-  if (srcfiles.files.length === 0) {
+  if (srcfiles.items.length === 0) {
     log.wrn('Nothing to watch for Livereload')
         .wrn('Did you miss the parameter to add livereload files?');
     return;
   }
   log.sep(' livereload-config > ')
       .inf('Watching for LiveReload:')
-      .inf(srcfiles.files, '', 2)
+      .inf(srcfiles.items, '', 2)
       .sep(' < livereload-config ');
   pkgLivereload.listen();
   //pkgGulp.watch('./wp-content/themes/olympos/lib/*.js', ['uglify']);
-  pkgGulp.watch(srcfiles.files
+  pkgGulp.watch(srcfiles.items
       , function(files) {pkgLivereload.changed(files) });
 });
 
@@ -524,7 +524,7 @@ pkgGulp.task('imagemin', function () {
           pkgImagemin.optipng({optimizationLevel: 5}),
           pkgImagemin.svgo({
             plugins: [{removeViewBox: true}]})]))
-        .pipe(pkgGulp.dest(imagemin.singleton.files[idx]))
+        .pipe(pkgGulp.dest(imagemin.singleton.items[idx]))
         .on('end', function() {log.don('imagemin');});
   }
 });
