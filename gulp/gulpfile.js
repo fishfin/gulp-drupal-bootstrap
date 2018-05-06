@@ -519,8 +519,6 @@ pkgGulp.task('livereload', function() {
 pkgGulp.task('imagemin', function () {
   imagemin();
   for (idx in imagemin.singleton.filep) {
-    idx = 0;
-    log.inf(imagemin.singleton.filep[idx]);
     pkgGulp.src(imagemin.singleton.filep[idx])
         .pipe(pkgImagemin([
           pkgImagemin.gifsicle({interlaced: true}),
