@@ -31,6 +31,10 @@ const pkgSourcemaps   = require('gulp-sourcemaps');     // inline source map in 
 const pkgPath         = require('path');                // utilities to work with files and directories
 const pkgRunSequence  = require('run-sequence');        // run tasks in sequence instead of parallel
 const pkgYargs        = require('yargs');               // parse command line arguments
+//const pkgImagemin     = require('gulp-imagemin');       // to optimize images (png, jpg, jpeg, gif
+//const pkgPngquant     = require('imagemin-pngquant');   // used by imagemin for png optimization
+//const pkgMozjpeg      = require('imagemin-mozjpeg');    // used by imagemin for jpg optimization
+//const pkgGifsicle     = require('imagemin-gifsicle');   // used by imagemin for gif optimization
 
 const argv = new pkgYargs
     .option('B', {alias: 'beep', default: false, type: 'boolean'})
@@ -43,6 +47,7 @@ const argv = new pkgYargs
     .option('s', {alias: 'scssdir', default: '', type: 'string'})
     .option('c', {alias: 'cssdir', default:'', type: 'string'})
     .option('f', {alias: 'scssfiles', default:'', type: 'string'})
+    .option('l', {alias: 'livereload', default:'', type: 'string'})
     .argv;
 //const pkgConcat = require('gulp-concat');           // to concatenate files into one
 //const pkgUglify = require('gulp-uglify');           // minify js, optional, comment out if not used
@@ -120,6 +125,16 @@ class Log {
   }
 }
 
+function sass() {
+  if (sass.singleton === undefined) {
+    sass.singleton = new Sass(argv.dev, argv.style, argv.sourcemap
+        , argv.scssdir, argv.cssdir, argv.scssfiles
+        , argv.drupalroot, argv.theme
+        , argv.debug);
+  }
+  return sass.singleton;
+}
+
 /* -----------------------------------------------------------------------------
  * Sass class that takes care of all sass processing
  * -----------------------------------------------------------------------------
@@ -135,6 +150,8 @@ class Sass {
     this.scssfiles = [];
     this.scssfilepaths = [];
     this.templatedir = '';
+    this.templatefiles = '';
+    this.cssfiles = '';
 
     var referencedir = '';
 
@@ -220,9 +237,12 @@ class Sass {
           .ter('Use -d, -t or -s, -c');
     }
 
+    this.cssfiles = pkgPath.join(this.cssdir, '*.css');
+
     var templatedir = pkgPath.join(referencedir, '..', 'templates');
     if (isValidPath(templatedir, 'd')) {
       this.templatedir = templatedir;
+      this.templatefiles = pkgPath.join(this.templatedir, '**', '*.twig');
       log.inf('Template directory detected ' + this.templatedir);
     }
 
@@ -252,11 +272,13 @@ class Sass {
         .inf('Source Maps         : ' + (this.sourcemap ? 'Generate' : 'Remove'))
         .inf('CSS Style           : ' + this.style)
         .sep(' < sass-config ');
+    return this;
   }
   watch() {
     var scssFilePattern = pkgPath.normalize(this.scssdir + '/**/*.scss');
     log.inf('Watching ' + scssFilePattern);
     pkgGulp.watch(scssFilePattern, ['sass']);
+    return this;
   }
   /* ---------------------------------------------------------------------------
    * This task creates CSS from one single core SCSS file. It first runs the
@@ -273,12 +295,74 @@ class Sass {
         .pipe(pkgIf(this.sourcemap, pkgSourcemaps.write('./')))   // write sourcemap only if dev build
         .pipe(pkgGulp.dest(this.cssdir))
         .on('end', function() {log.don('sass-preprocess');});
+    return this;
   }
   clean() {
     var sourceMapFilePattern = pkgPath.join(this.cssdir, '*.map');
     log.inf('Removing maps ' + sourceMapFilePattern);
     pkgDel.sync([sourceMapFilePattern], {force: true});
     log.don('sass-clean');
+    return this;
+  }
+}
+
+function livereload() {
+  sass();
+  if (livereload.singleton === undefined) {
+    livereload.singleton = new Livereload(
+        [sass.singleton.cssfiles, sass.singleton.templatefiles, argv.livereload]
+        , argv.debug);
+  }
+  return livereload.singleton;
+}
+
+/* -----------------------------------------------------------------------------
+ * Livereload class that takes care of all Livereload processing
+ * -----------------------------------------------------------------------------
+ */
+class Livereload {
+  constructor(lrfiles='', debug=false) {
+    this.lrfiles = [];
+    this.add(lrfiles);
+    return this;
+  }
+  add(lrfiles='') {
+    if (!Array.isArray(lrfiles)) {
+      console.log(lrfiles);
+      lrfiles = lrfiles.split(',');
+    }
+    for (var idx in lrfiles) {
+      if (!Array.isArray(lrfiles[idx]) && lrfiles[idx].indexOf(',') >= 0) {
+        lrfiles[idx] = lrfiles[idx].split(',');
+      }
+      if (Array.isArray(lrfiles[idx])) {
+        this.add(lrfiles[idx]);
+      } else if ((lrfiles[idx] = lrfiles[idx].trim()) !== '') {
+        this.remove(lrfiles[idx]);
+        this.lrfiles.push(lrfiles[idx]);
+      }
+    }
+    return this;
+  }
+  remove(lrfiles='') {
+    if (!Array.isArray(lrfiles)) {
+      lrfiles = lrfiles.split(',');
+    }
+    for (var idx in lrfiles) {
+      if (!Array.isArray(lrfiles[idx]) && lrfiles[idx].indexOf(',') >= 0) {
+        lrfiles[idx] = lrfiles[idx].split(',');
+      }
+      if (Array.isArray(lrfiles[idx])) {
+        this.remove(lrfiles[idx]);
+      } else {
+        for (var jdx in this.lrfiles) {
+          if (lrfiles[idx].trim() === this.lrfiles[jdx].trim()) {
+            this.lrfiles.splice(jdx, 1);
+          }
+        }
+      }
+    }
+    return this;
   }
 }
 
@@ -360,16 +444,6 @@ function validatePaths(pathArray) {
 
 const log = new Log('', argv.beep, argv.debug);
 
-function sass() {
-  if (sass.singleton === undefined) {
-    sass.singleton = new Sass(argv.dev, argv.style, argv.sourcemap
-        , argv.scssdir, argv.cssdir, argv.scssfiles
-        , argv.drupalroot, argv.theme
-        , argv.debug);
-  }
-  return sass.singleton;
-}
-
 showWelcomeMessage();
 
 pkgGulp.task('default', function() {
@@ -393,22 +467,27 @@ pkgGulp.task('sass-watch', ['sass'], function() {
 });
 
 pkgGulp.task('livereload', function() {
-  sass();
-  var livereloadwatch = [
-    pkgPath.join(sass.singleton.cssdir, '*.css'),
-  ];
-  if (sass.singleton.templatedir !== '') {
-    livereloadwatch.push(pkgPath.join(sass.singleton.templatedir, '**', '*.twig'));
-  }
+  livereload();
   log.sep(' livereload-config > ')
       .inf('Watching for LiveReload:')
-      .inf(livereloadwatch, '', 2)
+      .inf(livereload.singleton.lrfiles, '', 2)
       .sep(' < livereload-config ');
   pkgLivereload.listen();
   //pkgGulp.watch('./wp-content/themes/olympos/lib/*.js', ['uglify']);
-  pkgGulp.watch(livereloadwatch
+  pkgGulp.watch(livereload.singleton.lrfiles
       , function(files) {pkgLivereload.changed(files) });
 });
+
+/*pkgGulp.task('imagemin', function () {
+  sass();
+  return gulp.src('./wp-content/themes/olympos/images/*')
+      .pipe(imagemin({
+        progressive: true,
+        svgoPlugins: [{removeViewBox: false}],
+        use: [pngquant(), mozjpeg(), gifsicle()]
+      }))
+      .pipe(gulp.dest('./wp-content/themes/olympos/images'));
+});*/
 
 /* -----------------------------------------------------------------------------
  * Displays message on usage of the script, with options that are available on
@@ -499,17 +578,7 @@ function beautifyText(text, options) {
   return attributes + text + endAttributes; //beautifyText.textAttributes['reset'];
 }
 
-/*gulp.task('imagemin', function () {
-    return gulp.src('./wp-content/themes/olympos/images/*')
-        .pipe(imagemin({
-            progressive: true,
-            svgoPlugins: [{removeViewBox: false}],
-            use: [pngquant()]
-        }))
-        .pipe(gulp.dest('./wp-content/themes/olympos/images'));
-});
-
-pkgGulp.task('uglify', function() {
+/*pkgGulp.task('uglify', function() {
   gulp.src('./wp-content/themes/olympos/lib/*.js')
     .pipe(pkgUglify('olympos.min.js'))
     .pipe(gulp.dest('./wp-content/themes/olympos/js'))
