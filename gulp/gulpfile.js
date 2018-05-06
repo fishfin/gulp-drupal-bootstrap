@@ -141,9 +141,14 @@ function imagemin() {
       imagemin.singleton.filep.push(pkgPath.join(imagemin.singleton.files[idx], '*'));
     }
 
-    log.sep(' imagemin-config > ')
-        .inf(imagemin.singleton.filep, '', 2)
-        .sep(' < imagemin-config ');
+    if (imagemin.singleton.filep.length === 0) {
+      log.wrn('No image directories to process')
+          .wrn('Did you miss the parameter to add image directories?');
+    } else {
+      log.sep(' imagemin-config > ')
+          .inf(imagemin.singleton.filep, '', 2)
+          .sep(' < imagemin-config ');
+    }
   }
   return imagemin.singleton;
 }
