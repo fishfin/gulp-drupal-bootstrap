@@ -54,7 +54,6 @@ const argv = new pkgYargs
 //const imagemin = require('gulp-imagemin');
 //const pngquant = require('imagemin-pngquant');
 
-
 /* -----------------------------------------------------------------------------
  * Writes a log message to console with time or user defined prefix.
  * -----------------------------------------------------------------------------
@@ -307,11 +306,12 @@ class Sass {
 }
 
 function livereload() {
-  sass();
+  var livereloadfiles = [argv.livereload];
+  if (sass.singleton !== undefined) {
+    livereloadfiles.push([sass.singleton.cssfiles,  sass.singleton.templatefiles, ]);
+  }
   if (livereload.singleton === undefined) {
-    livereload.singleton = new Livereload(
-        [sass.singleton.cssfiles, sass.singleton.templatefiles, argv.livereload]
-        , argv.debug);
+    livereload.singleton = new Livereload(livereloadfiles, argv.debug);
   }
   return livereload.singleton;
 }
@@ -468,6 +468,11 @@ pkgGulp.task('sass-watch', ['sass'], function() {
 
 pkgGulp.task('livereload', function() {
   livereload();
+  if (livereload.singleton.lrfiles.length === 0) {
+    log.wrn('Nothing to watch for Livereload')
+        .wrn('Did you miss the parameter to add livereload files?');
+    return;
+  }
   log.sep(' livereload-config > ')
       .inf('Watching for LiveReload:')
       .inf(livereload.singleton.lrfiles, '', 2)
@@ -519,6 +524,7 @@ pkgGulp.task('usage', function() {
       .inf('  -f, --scssfiles   SCSS files to preeprocess, comma-delimited')
       .inf('  -s, --style       Sass output style, compact|compressed|expanded|nested')
       .inf('  -m, --source-map  Creates sourcemap (*.map) files               [boolean]')
+      .inf('  -l, --livereload  Watch files for livereload')
       .inf('Examples:', 'cyan')
       .inf('  gulp')
       .inf('  gulp sass')
