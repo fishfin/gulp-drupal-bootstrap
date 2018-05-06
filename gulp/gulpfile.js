@@ -32,6 +32,8 @@ const pkgPath         = require('path');                // utilities to work wit
 const pkgRunSequence  = require('run-sequence');        // run tasks in sequence instead of parallel
 const pkgYargs        = require('yargs');               // parse command line arguments
 const pkgImagemin     = require('gulp-imagemin');       // to optimize images (png, jpg, jpeg, gif
+const pkgUglifyjs     = require('gulp-uglify');         // minify js or css, optional, comment out if not used
+const pkgConcat       = require('gulp-concat');         // to concatenate files into one
 
 const argv = new pkgYargs
     .option('B', {alias: 'beep', default: false, type: 'boolean'})
@@ -46,11 +48,10 @@ const argv = new pkgYargs
     .option('f', {alias: 'scssfiles', default:'', type: 'string'})
     .option('l', {alias: 'livereload', default:'', type: 'string'})
     .option('i', {alias: 'imagemin', default:'', type: 'string'})
+    .option('u', {alias: 'uglifyjss', default:'', type: 'string'})
+    .option('v', {alias: 'uglifyjsd', default:'', type: 'string'})
+    .option('w', {alias: 'uglifyjsf', default:'', type: 'string'})
     .argv;
-//const pkgConcat = require('gulp-concat');           // to concatenate files into one
-//const pkgUglify = require('gulp-uglify');           // minify js, optional, comment out if not used
-//const imagemin = require('gulp-imagemin');
-//const pngquant = require('imagemin-pngquant');
 
 /* -----------------------------------------------------------------------------
  * Writes a log message to console with time or user defined prefix.
@@ -314,7 +315,7 @@ class Sass {
         .inf('SCSS Files (Watch)  : ' + pkgPath.join('**', '*.scss'))
         .inf('SCSS Files (Process): ' + this.scssfiles)
         .inf('CSS Dir             : ' + this.cssdir)
-        .inf('Source Maps         : ' + (this.sourcemap ? 'Generate' : 'Remove'))
+        .inf('Source Map          : ' + (this.sourcemap ? 'Generate' : 'Remove'))
         .inf('CSS Style           : ' + this.style)
         .sep(' < sass-config ');
     return this;
@@ -528,6 +529,42 @@ pkgGulp.task('imagemin', function () {
   }
 });
 
+pkgGulp.task('uglifyjs', function() {
+  var uglifyjss = pkgPath.join((argv.uglifyjss === '' ? process.cwd() : argv.uglifyjss),
+      '*.js');
+  var uglifyjsd = (argv.uglifyjsd === '' ? process.cwd(): argv.uglifyjsd);
+  var uglifyjsf = (argv.uglifyjsf === '' && argv.uglifyjsf.endsWith('.js'))
+      ? argv.uglifyjsf : argv.uglifyjsf + '.min.js';
+  log.sep(' uglifyjs-config >')
+      .inf('Source Dir     : ' + uglifyjss)
+      .inf('Destination Dir: ' + uglifyjsd)
+      .inf('Ugly File      : ' + (uglifyjsf === '' ? 'Not provided' : uglifyjsf))
+      .inf('Source Map     : ' + (argv.sourcemap ? 'Generate' : 'Remove'))
+      .sep(' < uglifyjs-config ');
+
+  var sourceMapFilePattern = pkgPath.join(uglifyjsd, '*.map');
+  log.inf('Removing maps ' + sourceMapFilePattern);
+  pkgDel.sync([sourceMapFilePattern], {force: true});
+
+  if (argv.uglifyjsf === '') {
+    pkgGulp.src(uglifyjss)
+        .pipe(pkgIf(argv.sourcemap, pkgSourcemaps.init()))        // create sourcemaps only parameter set
+        .pipe(pkgUglifyjs())
+        .pipe(pkgIf(argv.sourcemap, pkgSourcemaps.write('./')))   // write sourcemap only if dev build
+        .pipe(pkgGulp.dest(uglifyjsd));
+
+  } else {
+    pkgGulp.src(uglifyjss)
+        .pipe(pkgIf(argv.sourcemap, pkgSourcemaps.init()))        // create sourcemaps only parameter set
+        .pipe(pkgConcat(uglifyjsf))
+        .pipe(pkgGulp.dest(uglifyjsd))
+        //      .pipe(pkgIf(arg['uglifyjs-file'] !== '', pkgRename(argv.uglifyjsf)))
+        .pipe(pkgUglifyjs())
+        .pipe(pkgIf(argv.sourcemap, pkgSourcemaps.write('./')))   // write sourcemap only if dev build
+        .pipe(pkgGulp.dest(uglifyjsd));
+  }
+});
+
 /* -----------------------------------------------------------------------------
  * Displays message on usage of the script, with options that are available on
  * the command prompt.
@@ -547,6 +584,7 @@ pkgGulp.task('usage', function() {
       .inf('  sass-watch        Watch Sass directory and execute preprocessor')
       .inf('  sass              Execute only Sass preprocessor')
       .inf('  sass-clean        Remove *.map files')
+      .inf('  uglifyjs          Minimfies JavaScript files')
       .inf('  usage             Display usage information')
       .inf('Options:', 'cyan')
       .inf('  -B, --beep        Beep on completion of important task          [boolean]')
@@ -561,6 +599,9 @@ pkgGulp.task('usage', function() {
       .inf('  -m, --source-map  Creates sourcemap (*.map) files               [boolean]')
       .inf('  -l, --livereload  Watch files for livereload')
       .inf('  -i, --imagemin    Image directories to minify')
+      .inf('  -u, --uglifyjss   Uglify JS source directory')
+      .inf('  -v  --uglifyjsd   Uglify JS destination directory')
+      .inf('  -w  --uglifyjsf   Uglify JS destination file if to be merged')
       .inf('Examples:', 'cyan')
       .inf('  gulp')
       .inf('  gulp sass')
@@ -619,10 +660,3 @@ function beautifyText(text, options) {
   }
   return attributes + text + endAttributes; //beautifyText.textAttributes['reset'];
 }
-
-/*pkgGulp.task('uglify', function() {
-  gulp.src('./wp-content/themes/olympos/lib/*.js')
-    .pipe(pkgUglify('olympos.min.js'))
-    .pipe(gulp.dest('./wp-content/themes/olympos/js'))
-});
-*/
