@@ -19,9 +19,11 @@
     "gulp": "^3.9.1",
     "gulp-autoprefixer": "^5.0.0",
     "gulp-if": "^2.0.2",
+    "gulp-imagemin": "^4.1.0",
     "gulp-livereload": "^3.8.1",
     "gulp-sass": "^4.0.1",
     "gulp-sourcemaps": "^2.6.4",
+    "gulp-uglify": "^3.0.0",
     "path": "^0.12.7",
     "run-sequence": "^2.2.1",
     "yargs": "^11.0.0"
