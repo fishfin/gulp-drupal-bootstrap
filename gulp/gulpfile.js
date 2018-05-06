@@ -32,9 +32,6 @@ const pkgPath         = require('path');                // utilities to work wit
 const pkgRunSequence  = require('run-sequence');        // run tasks in sequence instead of parallel
 const pkgYargs        = require('yargs');               // parse command line arguments
 const pkgImagemin     = require('gulp-imagemin');       // to optimize images (png, jpg, jpeg, gif
-//const pkgPngquant     = require('imagemin-pngquant');   // used by imagemin for png optimization
-//const pkgMozjpeg      = require('imagemin-mozjpeg');    // used by imagemin for jpg optimization
-//const pkgGifsicle     = require('imagemin-gifsicle');   // used by imagemin for gif optimization
 
 const argv = new pkgYargs
     .option('B', {alias: 'beep', default: false, type: 'boolean'})
