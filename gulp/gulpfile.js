@@ -31,7 +31,7 @@ const pkgSourcemaps   = require('gulp-sourcemaps');     // inline source map in 
 const pkgPath         = require('path');                // utilities to work with files and directories
 const pkgRunSequence  = require('run-sequence');        // run tasks in sequence instead of parallel
 const pkgYargs        = require('yargs');               // parse command line arguments
-//const pkgImagemin     = require('gulp-imagemin');       // to optimize images (png, jpg, jpeg, gif
+const pkgImagemin     = require('gulp-imagemin');       // to optimize images (png, jpg, jpeg, gif
 //const pkgPngquant     = require('imagemin-pngquant');   // used by imagemin for png optimization
 //const pkgMozjpeg      = require('imagemin-mozjpeg');    // used by imagemin for jpg optimization
 //const pkgGifsicle     = require('imagemin-gifsicle');   // used by imagemin for gif optimization
@@ -39,7 +39,7 @@ const pkgYargs        = require('yargs');               // parse command line ar
 const argv = new pkgYargs
     .option('B', {alias: 'beep', default: false, type: 'boolean'})
     .option('D', {alias: 'dev', default: false, type: 'boolean'})
-    .option('G', {alias: 'debug', default: false, type: 'boolean'})
+    .option('V', {alias: 'verbose', default: false, type: 'boolean'})
     .option('d', {alias: 'drupalroot', default: '', type: 'string'})
     .option('t', {alias: 'theme', default: '', type: 'string'})
     .option('m', {alias: 'sourcemap', default: false, type: 'boolean'})
@@ -48,6 +48,7 @@ const argv = new pkgYargs
     .option('c', {alias: 'cssdir', default:'', type: 'string'})
     .option('f', {alias: 'scssfiles', default:'', type: 'string'})
     .option('l', {alias: 'livereload', default:'', type: 'string'})
+    .option('i', {alias: 'imagemin', default:'', type: 'string'})
     .argv;
 //const pkgConcat = require('gulp-concat');           // to concatenate files into one
 //const pkgUglify = require('gulp-uglify');           // minify js, optional, comment out if not used
@@ -59,20 +60,20 @@ const argv = new pkgYargs
  * -----------------------------------------------------------------------------
  */
 class Log {
-  constructor(prefix='', beep=false, debug=false) {
+  constructor(prefix='', beep=false, verbose=false) {
     this.prefix = prefix.toString();
     if (this.prefix !== '') {
       this.prefix = fitLength(this.prefix.toUpperCase(), 8, ' ', true);
     }
     this.beep = (beep ? '\x07' : '');
-    this.debug = debug;
+    this.verbose = verbose;
   }
   log(text, color='', type='', indent=0, beep=false, prefix='') {
     if (Array.isArray(text)) {
       for (var idx in text) {
         this.log(text[idx], color, type, indent, beep, prefix);
       }
-    } else if (type !== 'd' || this.debug) {
+    } else if (type !== 'd' || this.verbose) {
       switch (type) {
         case 'w':
           type = 'WRN '.yellow;
@@ -124,12 +125,35 @@ class Log {
   }
 }
 
+function imagemin() {
+  if (imagemin.singleton ===  undefined) {
+    imagemin.singleton = new FileArray(argv.imagemin);
+
+    if (sass.singleton !== undefined) {
+      imagemin.singleton.add([
+        pkgPath.join(sass.singleton.themeimagedir),
+        pkgPath.join(sass.singleton.assetsdir)
+      ]);
+    }
+
+    imagemin.singleton.filep = [];
+    for (var idx in imagemin.singleton.files) {
+      imagemin.singleton.filep.push(pkgPath.join(imagemin.singleton.files[idx], '*'));
+    }
+
+    log.sep(' imagemin-config > ')
+        .inf(imagemin.singleton.filep, '', 2)
+        .sep(' < imagemin-config ');
+  }
+  return imagemin.singleton;
+}
+
 function sass() {
   if (sass.singleton === undefined) {
     sass.singleton = new Sass(argv.dev, argv.style, argv.sourcemap
         , argv.scssdir, argv.cssdir, argv.scssfiles
         , argv.drupalroot, argv.theme
-        , argv.debug);
+        , argv.verbose);
   }
   return sass.singleton;
 }
@@ -142,15 +166,17 @@ class Sass {
   constructor(dev=false, style='compressed', sourcemap=false
               , scssdir='', cssdir='', scssfiles=''
               , drupalroot='', theme=''
-              , debug=false) {
+              , verbose=false) {
     this.dev = dev;
-    this.debug = debug;
+    this.verbose = verbose;
     this.scssdir = this.cssdir = '';
     this.scssfiles = [];
     this.scssfilepaths = [];
     this.templatedir = '';
     this.templatefiles = '';
     this.cssfiles = '';
+    this.themeimagedir = '';
+    this.assetsdir = '';
 
     var referencedir = '';
 
@@ -245,6 +271,24 @@ class Sass {
       log.inf('Template directory detected ' + this.templatedir);
     }
 
+    var themeimagedir = pkgPath.join(referencedir, '..', 'images');
+    if (isValidPath(themeimagedir, 'd')) {
+      this.themeimagedir = themeimagedir;
+      log.inf('Theme images directory detected ' + this.themeimagedir);
+    }
+
+    var assetsdir_try = [
+          pkgPath.join(referencedir, '..', '..', '..', 'sites', 'default', 'files'),
+          pkgPath.join(referencedir, '..', '..', '..', '..', 'sites', 'default', 'files'),
+    ];
+    for (var idx in assetsdir_try) {
+      if (isValidPath(assetsdir_try[idx], 'd')) {
+        this.assetsdir = assetsdir_try[idx];
+        log.inf('Assets directory detected ' + this.themeimagedir);
+        break;
+      }
+    }
+
     scssfiles = (scssfiles === '' ? ['style.scss'] : scssfiles.split(','));
     for (var idx in scssfiles) {
       var scssfilepath = pkgPath.join(this.scssdir, scssfiles[idx]);
@@ -305,60 +349,41 @@ class Sass {
   }
 }
 
-function livereload() {
-  var livereloadfiles = [argv.livereload];
-  if (sass.singleton !== undefined) {
-    livereloadfiles.push([sass.singleton.cssfiles,  sass.singleton.templatefiles, ]);
-  }
-  if (livereload.singleton === undefined) {
-    livereload.singleton = new Livereload(livereloadfiles, argv.debug);
-  }
-  return livereload.singleton;
-}
-
-/* -----------------------------------------------------------------------------
- * Livereload class that takes care of all Livereload processing
- * -----------------------------------------------------------------------------
- */
-class Livereload {
-  constructor(lrfiles='', debug=false) {
-    this.lrfiles = [];
-    this.add(lrfiles);
+class FileArray {
+  constructor(files, filedelim=',', verbose=false) {
+    this.files = [];
+    this.filedelim = filedelim;
+    this.add(files);
     return this;
   }
-  add(lrfiles='') {
-    if (!Array.isArray(lrfiles)) {
-      console.log(lrfiles);
-      lrfiles = lrfiles.split(',');
+  add(files) {
+    if (!Array.isArray(files)
+        && files.indexOf(this.filedelim) >= 0) {
+      files = files.split(this.filedelim);
     }
-    for (var idx in lrfiles) {
-      if (!Array.isArray(lrfiles[idx]) && lrfiles[idx].indexOf(',') >= 0) {
-        lrfiles[idx] = lrfiles[idx].split(',');
+    if (Array.isArray(files)) {
+      for (var idx in files) {
+        this.add(files[idx]);
       }
-      if (Array.isArray(lrfiles[idx])) {
-        this.add(lrfiles[idx]);
-      } else if ((lrfiles[idx] = lrfiles[idx].trim()) !== '') {
-        this.remove(lrfiles[idx]);
-        this.lrfiles.push(lrfiles[idx]);
-      }
+    } else if ((files = files.trim()) !== '') {
+      this.remove(files);
+      this.files.push(files);
     }
     return this;
   }
-  remove(lrfiles='') {
-    if (!Array.isArray(lrfiles)) {
-      lrfiles = lrfiles.split(',');
+  remove(files) {
+    if (!Array.isArray(files)
+        && files.indexOf(this.filedelim) >= 0) {
+      files = files.split(this.filedelim);
     }
-    for (var idx in lrfiles) {
-      if (!Array.isArray(lrfiles[idx]) && lrfiles[idx].indexOf(',') >= 0) {
-        lrfiles[idx] = lrfiles[idx].split(',');
+    if (Array.isArray(files)) {
+      for (var idx in files) {
+        this.remove(files[idx]);
       }
-      if (Array.isArray(lrfiles[idx])) {
-        this.remove(lrfiles[idx]);
-      } else {
-        for (var jdx in this.lrfiles) {
-          if (lrfiles[idx].trim() === this.lrfiles[jdx].trim()) {
-            this.lrfiles.splice(jdx, 1);
-          }
+    } else if ((files = files.trim()) !== '') {
+      for (var idx in this.files) {
+        if (files.trim === this.files[idx]) {
+          this.files.splice(idx, 1);
         }
       }
     }
@@ -442,7 +467,7 @@ function validatePaths(pathArray) {
   }
 }
 
-const log = new Log('', argv.beep, argv.debug);
+const log = new Log('', argv.beep, argv.verbose);
 
 showWelcomeMessage();
 
@@ -451,7 +476,7 @@ pkgGulp.task('default', function() {
 });
 
 pkgGulp.task('watch', function() {
-  pkgRunSequence(['sass-watch', 'livereload']);
+  pkgRunSequence(['sass-watch', 'livereload', 'imagemin']);
 });
 
 pkgGulp.task('sass-clean', function() {
@@ -467,32 +492,41 @@ pkgGulp.task('sass-watch', ['sass'], function() {
 });
 
 pkgGulp.task('livereload', function() {
-  livereload();
-  if (livereload.singleton.lrfiles.length === 0) {
+  var srcfiles = new FileArray(argv.livereload);
+  if (sass.singleton !== undefined) {
+    srcfiles.add([sass.singleton.cssfiles,  sass.singleton.templatefiles]);
+  }
+  if (srcfiles.files.length === 0) {
     log.wrn('Nothing to watch for Livereload')
         .wrn('Did you miss the parameter to add livereload files?');
     return;
   }
   log.sep(' livereload-config > ')
       .inf('Watching for LiveReload:')
-      .inf(livereload.singleton.lrfiles, '', 2)
+      .inf(srcfiles.files, '', 2)
       .sep(' < livereload-config ');
   pkgLivereload.listen();
   //pkgGulp.watch('./wp-content/themes/olympos/lib/*.js', ['uglify']);
-  pkgGulp.watch(livereload.singleton.lrfiles
+  pkgGulp.watch(srcfiles.files
       , function(files) {pkgLivereload.changed(files) });
 });
 
-/*pkgGulp.task('imagemin', function () {
-  sass();
-  return gulp.src('./wp-content/themes/olympos/images/*')
-      .pipe(imagemin({
-        progressive: true,
-        svgoPlugins: [{removeViewBox: false}],
-        use: [pngquant(), mozjpeg(), gifsicle()]
-      }))
-      .pipe(gulp.dest('./wp-content/themes/olympos/images'));
-});*/
+pkgGulp.task('imagemin', function () {
+  imagemin();
+  for (idx in imagemin.singleton.filep) {
+    idx = 0;
+    log.inf(imagemin.singleton.filep[idx]);
+    pkgGulp.src(imagemin.singleton.filep[idx])
+        .pipe(pkgImagemin([
+          pkgImagemin.gifsicle({interlaced: true}),
+          pkgImagemin.jpegtran({progressive: true}),
+          pkgImagemin.optipng({optimizationLevel: 5}),
+          pkgImagemin.svgo({
+            plugins: [{removeViewBox: true}]})]))
+        .pipe(pkgGulp.dest(imagemin.singleton.files[idx]))
+        .on('end', function() {log.don('imagemin');});
+  }
+});
 
 /* -----------------------------------------------------------------------------
  * Displays message on usage of the script, with options that are available on
@@ -504,6 +538,7 @@ pkgGulp.task('usage', function() {
       .inf('Usage: gulp [command] [options]', 'cyan')
       .inf('Commands:', 'cyan')
       .inf('  [default]         Execute all features')
+      .inf('  imagemin          Minify images')
       .inf('  livereload        Watch CSS, JS and Template directories, and reload browser,')
       .inf('                    requires browser add-ons:')
       .inf('                    Chrome: https://chrome.google.com/webstore/detail/livereload/jnihajbhpnppcggbcgedagnkighmdlei')
@@ -516,15 +551,16 @@ pkgGulp.task('usage', function() {
       .inf('Options:', 'cyan')
       .inf('  -B, --beep        Beep on completion of important task          [boolean]')
       .inf('  -D, --dev         Use Development options for building          [boolean]')
-      .inf('  -G, --debug       Log debug messages                            [boolean]')
+      .inf('  -V, --verbose     Log detailed messges                          [boolean]')
       .inf('  -d, --drupalroot  Specify Drupal root directory, use with -t    [optional]')
       .inf('  -t, --theme       Drupal theme directory name, use with -d')
       .inf('  -s, --scssdir     SCSS directory to watch and process, use with -c')
       .inf('  -c, --cssdir      CSS directory for SASS output, use with -s')
-      .inf('  -f, --scssfiles   SCSS files to preeprocess, comma-delimited')
+      .inf('  -f, --scssfiles   SCSS files to preprocess, comma-delimited')
       .inf('  -s, --style       Sass output style, compact|compressed|expanded|nested')
       .inf('  -m, --source-map  Creates sourcemap (*.map) files               [boolean]')
       .inf('  -l, --livereload  Watch files for livereload')
+      .inf('  -i, --imagemin    Image directories to minify')
       .inf('Examples:', 'cyan')
       .inf('  gulp')
       .inf('  gulp sass')
