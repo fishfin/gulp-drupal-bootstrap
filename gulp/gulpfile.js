@@ -18,7 +18,7 @@
  * -----------------------------------------------------------------------------
  */
 
-const version = '1.0.0'                                 // script version
+const version = '1.0.1'                                 // script version
 const pkgColors       = require('colors');              // colors to console, provides additional String.prototype
 const pkgDel          = require('del');                 // to delete directories and files
 const pkgFs           = require('fs');                  // interact with file system, like check if file exists etc. does not require entry in package.json
@@ -45,7 +45,7 @@ const argv = new pkgYargs
     .option('y', {alias: 'style', default: '', type: 'string'})
     .option('s', {alias: 'scssdir', default: '', type: 'string'})
     .option('c', {alias: 'cssdir', default:'', type: 'string'})
-    .option('f', {alias: 'scssfiles', default:'', type: 'string'})
+    .option('F', {alias: 'scssfiles', default:'', type: 'string'})
     .option('l', {alias: 'livereload', default:'', type: 'string'})
     .option('i', {alias: 'imagemin', default:'', type: 'string'})
     .option('u', {alias: 'uglifyjss', default:'', type: 'string'})
@@ -246,6 +246,8 @@ class Sass {
       var themedir_try = [
           pkgPath.join(drupalroot, 'themes', theme)
         , pkgPath.join(drupalroot, 'themes', 'custom', theme)
+        , pkgPath.join(drupalroot, 'web', 'themes', theme)
+        , pkgPath.join(drupalroot, 'web', 'themes', 'custom', theme)
       ];
       var themedir = '';
       for (var idx in themedir_try) {
