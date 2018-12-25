@@ -597,8 +597,8 @@ pkgGulp.task('usage', function() {
       .inf('  -t, --theme       Drupal theme directory name, use with -d')
       .inf('  -s, --scssdir     SCSS directory to watch and process, use with -c')
       .inf('  -c, --cssdir      CSS directory for SASS output, use with -s')
-      .inf('  -f, --scssfiles   SCSS files to preprocess, comma-delimited')
-      .inf('  -s, --style       Sass output style, compact|compressed|expanded|nested')
+      .inf('  -e, --scssfiles   SCSS files to preprocess, comma-delimited')
+      .inf('  -y, --style       Sass output style, compact|compressed|expanded|nested')
       .inf('  -m, --source-map  Creates sourcemap (*.map) files               [boolean]')
       .inf('  -l, --livereload  Watch files for livereload')
       .inf('  -i, --imagemin    Image directories to minify')
@@ -608,8 +608,8 @@ pkgGulp.task('usage', function() {
       .inf('Examples:', 'cyan')
       .inf('  gulp')
       .inf('  gulp sass')
-      .inf('  gulp -BDdm -r d:\\htdocs\\d8 -t=darkthm')
-      .inf('  gulp --beep --drupalroot d:\\htdocs\\d8_new')
+      .inf('  gulp -BDdm -r d:\\htdocs\\d8 -t=mytheme')
+      .inf('  gulp --beep --drupalroot d:\\htdocs\\d8')
       .sep(' < usage ');
 });
 
