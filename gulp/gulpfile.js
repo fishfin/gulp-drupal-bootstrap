@@ -18,7 +18,7 @@
  * -----------------------------------------------------------------------------
  */
 
-const version = '1.0.1'                                 // script version
+const version = '1.0.2'                                 // script version
 const pkgColors       = require('colors');              // colors to console, provides additional String.prototype
 const pkgDel          = require('del');                 // to delete directories and files
 const pkgFs           = require('fs');                  // interact with file system, like check if file exists etc. does not require entry in package.json
@@ -246,6 +246,8 @@ class Sass {
       var themedir_try = [
           pkgPath.join(drupalroot, 'themes', theme)
         , pkgPath.join(drupalroot, 'themes', 'custom', theme)
+        , pkgPath.join(drupalroot, 'public_html', 'themes', theme)
+        , pkgPath.join(drupalroot, 'public_html', 'themes', 'custom', theme)
         , pkgPath.join(drupalroot, 'web', 'themes', theme)
         , pkgPath.join(drupalroot, 'web', 'themes', 'custom', theme)
       ];
