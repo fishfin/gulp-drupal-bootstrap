@@ -1,6 +1,6 @@
 {
   "name": "gulp-drupal-bootstrap",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Gulp automation for Drupal-Bootstrap development",
   "main": "gulpfile.js",
   "homepage": "https://github.com/fishfin/gulp-drupal-bootstrap",
@@ -15,18 +15,18 @@
   },
   "devDependencies": {
     "colors": "^1.3.3",
-    "del": "^3.0.0",
+    "del": "^5.0.0",
     "gulp": "^3.9.1",
-    "gulp-autoprefixer": "^6.0.0",
+    "gulp-autoprefixer": "^6.1.0",
     "gulp-concat": "^2.6.1",
     "gulp-if": "^2.0.2",
-    "gulp-imagemin": "^4.1.0",
+    "gulp-imagemin": "^6.0.0",
     "gulp-livereload": "^4.0.1",
     "gulp-sass": "^4.0.2",
-    "gulp-sourcemaps": "^2.6.4",
-    "gulp-uglify": "^3.0.1",
+    "gulp-sourcemaps": "^2.6.5",
+    "gulp-uglify": "^3.0.2",
     "path": "^0.12.7",
     "run-sequence": "^2.2.1",
-    "yargs": "^12.0.5"
+    "yargs": "^13.2.4"
   }
 }
